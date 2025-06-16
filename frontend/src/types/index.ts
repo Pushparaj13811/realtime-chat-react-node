@@ -1,17 +1,17 @@
 // User and Auth Types
 export const UserRole = {
-  USER: 'USER',
-  AGENT: 'AGENT',
-  ADMIN: 'ADMIN'
+  USER: 'user',
+  AGENT: 'agent',
+  ADMIN: 'admin'
 } as const;
 
 export type UserRole = typeof UserRole[keyof typeof UserRole];
 
 export const UserStatus = {
-  ONLINE: 'ONLINE',
-  OFFLINE: 'OFFLINE',
-  BUSY: 'BUSY',
-  AWAY: 'AWAY'
+  ONLINE: 'online',
+  OFFLINE: 'offline',
+  BUSY: 'busy',
+  AWAY: 'away'
 } as const;
 
 export type UserStatus = typeof UserStatus[keyof typeof UserStatus];
