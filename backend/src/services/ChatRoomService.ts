@@ -1,4 +1,4 @@
-import { ChatRoom, ChatRoomType, ChatRoomStatus } from '../models/ChatRoom.js';
+import { ChatRoom, ChatRoomType, ChatRoomStatus, Department, ProblemType } from '../models/ChatRoom.js';
 import type { IChatRoom } from '../models/ChatRoom.js';
 import { User, UserRole } from '../models/User.js';
 import { CacheService } from './CacheService.js';
@@ -11,7 +11,18 @@ export interface CreateChatRoomData {
   participants: string[];
   name?: string;
   assignedAgent?: string;
-  metadata?: any;
+  metadata?: {
+    subject?: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    department?: Department;
+    problemType?: ProblemType;
+    tags?: string[];
+    customerInfo?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+    };
+  };
 }
 
 export interface AgentAssignment {
@@ -51,7 +62,7 @@ export class ChatRoomService {
       // For support chats, auto-assign an available agent if not specified
       let assignedAgent = data.assignedAgent;
       if (data.type === ChatRoomType.SUPPORT && !assignedAgent) {
-        assignedAgent = await this.findAvailableAgent() || undefined;
+        assignedAgent = await this.findAvailableAgent(data.metadata?.department, data.metadata?.priority) || undefined;
       }
 
       const chatRoom = new ChatRoom({
@@ -207,42 +218,83 @@ export class ChatRoomService {
     }
   }
 
-  // Find an available agent for auto-assignment
-  async findAvailableAgent(): Promise<string | null> {
+  // Find available agent based on department and workload
+  async findAvailableAgent(department?: Department, priority?: string): Promise<string | null> {
     try {
-      // Get online agents with least number of active chats
-      const agents = await User.aggregate([
-        {
-          $match: {
-            role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
-            isOnline: true
-          }
-        },
-        {
-          $lookup: {
-            from: 'chatrooms',
-            localField: '_id',
-            foreignField: 'assignedAgent',
-            as: 'activeChatRooms',
-            pipeline: [
-              { $match: { status: ChatRoomStatus.ACTIVE, isActive: true } }
-            ]
-          }
-        },
-        {
-          $addFields: {
-            activeChatCount: { $size: '$activeChatRooms' }
-          }
-        },
-        {
-          $sort: { activeChatCount: 1 }
-        },
-        {
-          $limit: 1
-        }
-      ]);
+      console.log(`🔍 Finding agent for department: ${department}, priority: ${priority}`);
+      
+      // Build query for agents
+      const agentQuery: any = {
+        role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
+        isOnline: true
+      };
 
-      return agents.length > 0 ? agents[0]._id.toString() : null;
+      // If department is specified, prefer agents from that department
+      if (department && department !== Department.OTHER) {
+        agentQuery.department = department;
+      }
+
+      // Get agents matching criteria
+      let availableAgents = await User.find(agentQuery).lean();
+      console.log(`📋 Found ${availableAgents.length} agents for department ${department}`);
+
+      // If no department-specific agents found, get general agents
+      if (availableAgents.length === 0 && department !== Department.GENERAL_SUPPORT) {
+        console.log('🔄 No department-specific agents, trying general support...');
+        availableAgents = await User.find({
+          role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
+          isOnline: true,
+          department: { $in: [Department.GENERAL_SUPPORT, Department.OTHER] }
+        }).lean();
+      }
+
+      // If still no agents, get any available agent
+      if (availableAgents.length === 0) {
+        console.log('🔄 No general agents, trying any available agent...');
+        availableAgents = await User.find({
+          role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
+          isOnline: true
+        }).lean();
+      }
+
+      if (availableAgents.length === 0) {
+        console.log('❌ No agents available');
+        return null;
+      }
+
+      // Calculate workload for each agent (number of active chats)
+      const agentsWithWorkload = await Promise.all(
+        availableAgents.map(async (agent) => {
+          const activeChats = await ChatRoom.countDocuments({
+            assignedAgent: agent._id,
+            status: { $in: [ChatRoomStatus.ACTIVE, ChatRoomStatus.PENDING] }
+          });
+          
+          return {
+            ...agent,
+            workload: activeChats
+          };
+        })
+      );
+
+      // Sort by workload (ascending) and then by department match
+      agentsWithWorkload.sort((a, b) => {
+        // Prioritize by department match first
+        const aDeptMatch = a.department === department ? 0 : 1;
+        const bDeptMatch = b.department === department ? 0 : 1;
+        
+        if (aDeptMatch !== bDeptMatch) {
+          return aDeptMatch - bDeptMatch;
+        }
+        
+        // Then by workload
+        return a.workload - b.workload;
+      });
+
+      const selectedAgent = agentsWithWorkload[0];
+      console.log(`✅ Selected agent: ${selectedAgent.username} (workload: ${selectedAgent.workload}, dept: ${selectedAgent.department})`);
+      
+      return selectedAgent._id.toString();
     } catch (error) {
       console.error('Find available agent error:', error);
       return null;
@@ -410,6 +462,177 @@ export class ChatRoomService {
     } catch (error) {
       console.error('Remove participant error:', error);
       return false;
+    }
+  }
+
+  // Admin: Transfer agent from one chat to another
+  async transferAgentBetweenChats(fromChatId: string, toChatId: string, agentId: string, adminId: string, reason?: string): Promise<boolean> {
+    try {
+      // Verify both chat rooms exist
+      const [fromChat, toChat] = await Promise.all([
+        ChatRoom.findById(fromChatId),
+        ChatRoom.findById(toChatId)
+      ]);
+
+      if (!fromChat || !toChat) {
+        throw new Error('One or both chat rooms not found');
+      }
+
+      // Verify agent exists and is assigned to fromChat
+      const agent = await User.findById(agentId);
+      if (!agent || fromChat.assignedAgent?.toString() !== agentId) {
+        throw new Error('Agent not found or not assigned to source chat');
+      }
+
+      // Remove agent from fromChat and auto-assign a new one
+      await this.removeAgentFromChat(fromChatId, adminId, `Transferred to chat ${toChatId}: ${reason || 'Admin decision'}`);
+
+      // Assign agent to toChat
+      await this.assignAgent({
+        chatRoomId: toChatId,
+        agentId: agentId,
+        reason: `Transferred from chat ${fromChatId}: ${reason || 'Admin decision'}`
+      });
+
+      console.log(`✅ Agent ${agent.username} transferred from chat ${fromChatId} to ${toChatId}`);
+      return true;
+    } catch (error) {
+      console.error('Transfer agent between chats error:', error);
+      return false;
+    }
+  }
+
+  // Admin: Remove agent from chat and auto-assign new one
+  async removeAgentFromChat(chatRoomId: string, adminId: string, reason?: string): Promise<boolean> {
+    try {
+      const chatRoom = await ChatRoom.findById(chatRoomId);
+      if (!chatRoom) {
+        throw new Error('Chat room not found');
+      }
+
+      const previousAgentId = chatRoom.assignedAgent?.toString();
+      
+      if (!previousAgentId) {
+        throw new Error('No agent assigned to this chat');
+      }
+
+      // Find a new agent for this chat
+      const newAgentId = await this.findAvailableAgent(
+        chatRoom.metadata?.department,
+        chatRoom.metadata?.priority
+      );
+
+      // Update chat room with new agent
+      const updateData: any = {
+        $push: {
+          transferHistory: {
+            fromAgent: new mongoose.Types.ObjectId(previousAgentId),
+            toAgent: newAgentId ? new mongoose.Types.ObjectId(newAgentId) : null,
+            transferredAt: new Date(),
+            reason: reason || 'Admin removal'
+          }
+        }
+      };
+
+      if (newAgentId) {
+        updateData.assignedAgent = new mongoose.Types.ObjectId(newAgentId);
+        updateData.status = ChatRoomStatus.ACTIVE;
+      } else {
+        updateData.assignedAgent = null;
+        updateData.status = ChatRoomStatus.PENDING;
+      }
+
+      await ChatRoom.findByIdAndUpdate(chatRoomId, updateData);
+
+      // Update agent assignments
+      await User.findByIdAndUpdate(previousAgentId, {
+        $pull: { assignedChats: chatRoomId }
+      });
+
+      if (newAgentId) {
+        await User.findByIdAndUpdate(newAgentId, {
+          $addToSet: { assignedChats: chatRoomId }
+        });
+      }
+
+      console.log(`✅ Agent removed from chat ${chatRoomId}, new agent: ${newAgentId || 'none available'}`);
+      return true;
+    } catch (error) {
+      console.error('Remove agent from chat error:', error);
+      return false;
+    }
+  }
+
+  // Admin: Get agent workload statistics
+  async getAgentWorkloadStats(): Promise<any[]> {
+    try {
+      const stats = await User.aggregate([
+        {
+          $match: {
+            role: { $in: [UserRole.AGENT, UserRole.ADMIN] }
+          }
+        },
+        {
+          $lookup: {
+            from: 'chatrooms',
+            localField: '_id',
+            foreignField: 'assignedAgent',
+            as: 'assignedChats',
+            pipeline: [
+              {
+                $match: {
+                  status: { $in: [ChatRoomStatus.ACTIVE, ChatRoomStatus.PENDING] },
+                  isActive: true
+                }
+              }
+            ]
+          }
+        },
+        {
+          $addFields: {
+            activeChatsCount: { $size: '$assignedChats' },
+            workloadPercentage: {
+              $multiply: [
+                { $divide: [{ $size: '$assignedChats' }, 10] }, // Assuming max 10 chats per agent
+                100
+              ]
+            }
+          }
+        },
+        {
+          $project: {
+            username: 1,
+            email: 1,
+            department: 1,
+            specialization: 1,
+            isOnline: 1,
+            status: 1,
+            activeChatsCount: 1,
+            workloadPercentage: 1,
+            assignedChats: {
+              $map: {
+                input: '$assignedChats',
+                as: 'chat',
+                in: {
+                  _id: '$$chat._id',
+                  type: '$$chat.type',
+                  status: '$$chat.status',
+                  lastActivity: '$$chat.lastActivity',
+                  metadata: '$$chat.metadata'
+                }
+              }
+            }
+          }
+        },
+        {
+          $sort: { activeChatsCount: -1 }
+        }
+      ]);
+
+      return stats;
+    } catch (error) {
+      console.error('Get agent workload stats error:', error);
+      return [];
     }
   }
 } 

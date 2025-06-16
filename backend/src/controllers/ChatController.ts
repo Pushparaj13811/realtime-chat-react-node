@@ -361,4 +361,133 @@ export class ChatController {
       throw new ApiError(500, 'Internal server error');
     }
   };
+
+  // Get online users and agents
+  getOnlineUsers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.userId;
+      
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
+
+      // Get online users from cache/database
+      const onlineUsers = await this.authService.getActiveSessions()
+        .map(session => ({
+          userId: session.userId,
+          username: session.username,
+          role: session.role,
+          status: session.status,
+          socketId: session.sessionId // Using sessionId as socketId for now
+        }));
+
+      const response = new ApiResponse(200, 'Online users fetched', onlineUsers);
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Get online users error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Get online agents
+  getOnlineAgents = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.userId;
+      
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
+
+      const onlineAgents = await this.authService.getOnlineAgents();
+
+      const response = new ApiResponse(200, 'Online agents fetched', onlineAgents);
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Get online agents error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Admin: Transfer agent between chats
+  transferAgentBetweenChats = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
+      const { fromChatId, toChatId, agentId, reason } = req.body;
+
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
+
+      // Only admins can transfer agents between chats
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      if (!fromChatId || !toChatId || !agentId) {
+        throw new ApiError(400, 'From chat ID, to chat ID, and agent ID are required');
+      }
+
+      const success = await this.chatRoomService.transferAgentBetweenChats(
+        fromChatId,
+        toChatId,
+        agentId,
+        userId,
+        reason
+      );
+
+      const response = new ApiResponse(200, success ? 'Agent transferred successfully' : 'Failed to transfer agent');
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Transfer agent between chats error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Admin: Remove agent from chat
+  removeAgentFromChat = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
+      const { chatRoomId } = req.params;
+      const { reason } = req.body;
+
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
+
+      // Only admins can remove agents from chats
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      const success = await this.chatRoomService.removeAgentFromChat(chatRoomId, userId, reason);
+
+      const response = new ApiResponse(200, success ? 'Agent removed successfully' : 'Failed to remove agent');
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Remove agent from chat error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Admin: Get agent workload statistics
+  getAgentWorkloadStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userRole = (req as any).user?.role;
+
+      // Only admins can view agent workload stats
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      const stats = await this.chatRoomService.getAgentWorkloadStats();
+
+      const response = new ApiResponse(200, 'Agent workload stats fetched', stats);
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Get agent workload stats error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
 } 

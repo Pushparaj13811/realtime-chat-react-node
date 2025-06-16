@@ -40,6 +40,51 @@ export enum ChatRoomStatus {
   TRANSFERRED = 'transferred'
 }
 
+// Department types
+export enum Department {
+  TECHNICAL_SUPPORT = 'technical_support',
+  BILLING = 'billing',
+  SALES = 'sales',
+  GENERAL_SUPPORT = 'general_support',
+  ACCOUNT_MANAGEMENT = 'account_management',
+  UNKNOWN = 'unknown',
+  OTHER = 'other'
+}
+
+// Problem types
+export enum ProblemType {
+  // Technical Support
+  TECHNICAL_ISSUE = 'technical_issue',
+  BUG_REPORT = 'bug_report',
+  FEATURE_REQUEST = 'feature_request',
+  INSTALLATION_HELP = 'installation_help',
+  
+  // Billing
+  PAYMENT_ISSUE = 'payment_issue',
+  REFUND_REQUEST = 'refund_request',
+  BILLING_INQUIRY = 'billing_inquiry',
+  SUBSCRIPTION_CHANGE = 'subscription_change',
+  
+  // Sales
+  PRODUCT_INQUIRY = 'product_inquiry',
+  QUOTE_REQUEST = 'quote_request',
+  DEMO_REQUEST = 'demo_request',
+  PRICING_QUESTION = 'pricing_question',
+  
+  // General
+  GENERAL_QUESTION = 'general_question',
+  COMPLAINT = 'complaint',
+  FEEDBACK = 'feedback',
+  
+  // Account Management
+  ACCOUNT_ACCESS = 'account_access',
+  PROFILE_UPDATE = 'profile_update',
+  DATA_REQUEST = 'data_request',
+  
+  // Other
+  OTHER = 'other'
+}
+
 // Priority types
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 

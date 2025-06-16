@@ -6,7 +6,9 @@ import type {
   MessageStatus, 
   ChatRoomType, 
   ChatRoomStatus,
-  Priority 
+  Priority,
+  Department,
+  ProblemType
 } from '../types/index.js';
 
 // Database Interfaces
@@ -20,6 +22,8 @@ export interface IUser extends Document {
   lastSeen: Date;
   socketId?: string;
   assignedChats: mongoose.Types.ObjectId[];
+  department: Department;
+  specialization: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +69,8 @@ export interface IChatRoom extends Document {
   metadata?: {
     subject?: string;
     priority?: Priority;
+    department?: Department;
+    problemType?: ProblemType;
     tags?: string[];
     customerInfo?: {
       name?: string;

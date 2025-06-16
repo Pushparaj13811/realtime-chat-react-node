@@ -365,24 +365,36 @@ export class SocketService implements ISocketService {
   // Handle get online users request
   private async handleGetOnlineUsers(socket: Socket): Promise<void> {
     try {
-      const onlineUserIds = await this.cacheService.getOnlineUsers();
-      const onlineUsers = Array.from(this.connectedUsers.values()).filter(
-        user => onlineUserIds.includes(user.userId)
-      );
-
+      // Get currently connected users from the socket connections
+      const onlineUsers = Array.from(this.connectedUsers.values());
+      
       socket.emit('online-users', onlineUsers);
     } catch (error) {
       console.error('Get online users error:', error);
+      socket.emit('online-users', []); // Send empty array on error
     }
   }
 
   // Handle get online agents request
   private async handleGetOnlineAgents(socket: Socket): Promise<void> {
     try {
-      const onlineAgents = await this.authService.getOnlineAgents();
+      // Get agents who are currently connected via sockets
+      const connectedAgents = Array.from(this.connectedUsers.values())
+        .filter(user => user.role === 'agent' || user.role === 'admin');
+      
+      // Get full agent data from database for connected agents
+      const onlineAgents = [];
+      for (const connectedAgent of connectedAgents) {
+        const fullAgentData = await this.authService.getUserById(connectedAgent.userId);
+        if (fullAgentData) {
+          onlineAgents.push(fullAgentData);
+        }
+      }
+
       socket.emit('online-agents', onlineAgents);
     } catch (error) {
       console.error('Get online agents error:', error);
+      socket.emit('online-agents', []); // Send empty array on error
     }
   }
 
@@ -392,17 +404,28 @@ export class SocketService implements ISocketService {
       const user: AuthSession = socket.data.user;
       
       if (user) {
-        // Remove from connected users
+        console.log(`User ${user.username} disconnecting...`);
+
+        // Remove from connected users immediately
         this.connectedUsers.delete(socket.id);
 
-        // Update user status
-        await this.authService.updateUserStatus(user.userId, UserStatus.OFFLINE);
-        await this.cacheService.setUserOffline(user.userId);
+        // Check if user has other active socket connections
+        const hasOtherConnections = Array.from(this.connectedUsers.values())
+          .some(connectedUser => connectedUser.userId === user.userId);
 
-        // Notify others about offline status
-        await this.broadcastUserStatusChange(user.userId, UserStatus.OFFLINE);
+        // Only mark as offline if no other connections exist
+        if (!hasOtherConnections) {
+          console.log(`User ${user.username} going offline (no other connections)`);
+          
+          // Update user status in database
+          await this.authService.updateUserStatus(user.userId, UserStatus.OFFLINE);
+          await this.cacheService.setUserOffline(user.userId);
 
-        console.log(`User ${user.username} disconnected`);
+          // Notify others about offline status
+          await this.broadcastUserStatusChange(user.userId, UserStatus.OFFLINE);
+        } else {
+          console.log(`User ${user.username} still has other active connections`);
+        }
       }
     } catch (error) {
       console.error('Disconnection error:', error);

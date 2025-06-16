@@ -4,6 +4,8 @@ import { UserRole } from '../types/index.js';
 import type { RegisterRequest } from '../interfaces/index.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/apiError.js';
+import { User } from '../models/User.js';
+import { ChatRoom } from '../models/ChatRoom.js';
 
 export class AuthController {
   private authService: AuthService;
@@ -184,6 +186,103 @@ export class AuthController {
       res.status(200).json(response.toJSON());
     } catch (error) {
       console.error('Get all agents error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Get admin statistics (admin only)
+  getAdminStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userRole = (req as any).user?.role;
+
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      // Get total users
+      const totalUsers = await User.countDocuments();
+
+      // Get active agents (online agents)
+      const activeAgents = await User.countDocuments({
+        role: UserRole.AGENT,
+        status: 'online'
+      });
+
+      // Get active chat rooms
+      const activeChats = await ChatRoom.countDocuments({
+        status: 'ACTIVE'
+      });
+
+      // Get online users (all roles)
+      const onlineUsers = await User.countDocuments({
+        status: 'online'
+      });
+
+      const stats = {
+        totalUsers,
+        activeAgents,
+        activeChats,
+        onlineUsers
+      };
+
+      const response = new ApiResponse(200, 'Admin stats fetched', stats);
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Get admin stats error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Get all users (admin only)
+  getAllUsers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userRole = (req as any).user?.role;
+
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      const users = await User.find({}, '-password -__v')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const response = new ApiResponse(200, 'All users fetched', users);
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Get all users error:', error);
+      throw new ApiError(500, 'Internal server error');
+    }
+  };
+
+  // Update user status (admin only)
+  updateUserStatusAdmin = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userRole = (req as any).user?.role;
+      const { userId } = req.params;
+      const { status } = req.body;
+
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      if (!userId || !status) {
+        throw new ApiError(400, 'User ID and status are required');
+      }
+
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { status },
+        { new: true, select: '-password -__v' }
+      );
+
+      if (!user) {
+        throw new ApiError(404, 'User not found');
+      }
+
+      const response = new ApiResponse(200, 'User status updated successfully', user);
+      res.status(200).json(response.toJSON());
+    } catch (error) {
+      console.error('Update user status error:', error);
       throw new ApiError(500, 'Internal server error');
     }
   };

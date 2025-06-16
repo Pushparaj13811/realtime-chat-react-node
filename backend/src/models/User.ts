@@ -1,5 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
-import { UserRole, UserStatus } from '../types/index.js';
+import bcrypt from 'bcrypt';
+import { UserRole, UserStatus, Department } from '../types/index.js';
 import type { IUser } from '../interfaces/index.js';
 
 const userSchema = new Schema<IUser>({
@@ -48,7 +49,16 @@ const userSchema = new Schema<IUser>({
   assignedChats: [{
     type: Schema.Types.ObjectId,
     ref: 'ChatRoom'
-  }]
+  }],
+  department: {
+    type: String,
+    enum: Object.values(Department),
+    default: Department.UNKNOWN
+  },
+  specialization: {
+    type: String,
+    default: ''
+  }
 }, {
   timestamps: true
 });
@@ -57,5 +67,5 @@ const userSchema = new Schema<IUser>({
 userSchema.index({ role: 1, isOnline: 1 });
 
 export const User = mongoose.model<IUser>('User', userSchema);
-export { UserRole, UserStatus } from '../types/index.js';
+export { UserRole, UserStatus, Department } from '../types/index.js';
 export type { IUser } from '../interfaces/index.js'; 
