@@ -1,0 +1,34 @@
+{
+  "name": "backend",
+  "module": "src/index.ts",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Chat API",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "DEBUG=false nodemon --watch src --exec bun src/index.ts",
+    "start": "node dist/index.js",
+    "build": "bun build src/index.ts --outdir=dist --minify",
+    "build:tsc": "tsc"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/bun": "latest",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.1",
+    "@types/socket.io": "^3.0.2"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "mongoose": "^8.15.2",
+    "nodemon": "^3.1.10",
+    "redis": "^5.5.6",
+    "socket.io": "^4.8.1"
+  }
+}
