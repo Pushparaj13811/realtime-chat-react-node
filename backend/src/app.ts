@@ -9,7 +9,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: config.frontendUrl || "http://localhost:3001",
+  origin: config.frontendUrl,
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
