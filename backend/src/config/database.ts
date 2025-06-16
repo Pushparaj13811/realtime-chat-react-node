@@ -13,7 +13,13 @@ export class DatabaseConfig {
 
     try {
       const mongoUri = config.databaseUrl || 'mongodb://localhost:27017/chat-app';
-      this.mongoConnection = await mongoose.connect(mongoUri);
+      const databaseName = config.databaseName || 'chat-app';
+      this.mongoConnection = await mongoose.connect(
+        mongoUri,
+        {
+          dbName: databaseName
+        }
+      );
       console.log('✅ Connected to MongoDB');
       return this.mongoConnection;
     } catch (error) {
