@@ -16,7 +16,7 @@ export class AuthController {
 
   // Register new user
   register = async (req: Request, res: Response): Promise<void> => {
-    const { username, email, password, role }: RegisterRequest = req.body;
+    const { username, email, password, role, department, specialization }: RegisterRequest = req.body;
 
     if (!username || !email || !password) {
       throw new ApiError(400, 'Username, email, and password are required');
@@ -26,7 +26,9 @@ export class AuthController {
       username,
       email,
       password,
-      role: role || UserRole.USER
+      role: role || UserRole.USER,
+      department,
+      specialization
     });
 
     if (result.success) {

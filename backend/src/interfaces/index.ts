@@ -196,6 +196,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   role?: UserRole;
+  department?: Department;
+  specialization?: string;
 }
 
 export interface LoginRequest {

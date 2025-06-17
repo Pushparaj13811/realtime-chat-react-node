@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import type { IUser } from '../interfaces/index.js';
 import { User } from '../models/User.js';
-import { UserRole, UserStatus } from '../types/index.js';
+import { UserRole, UserStatus, Department } from '../types/index.js';
 import type { AuthSession, LoginResult, RegisterResult } from '../interfaces/index.js';
 import { CacheService } from './CacheService.js';
 import { ApiError } from '../utils/apiError.js';
@@ -28,11 +28,16 @@ export class AuthService {
     email: string;
     password: string;
     role?: UserRole;
+    department?: Department;
+    specialization?: string;
   }): Promise<RegisterResult> {
     try {
       // Check if user already exists
       const existingUser = await User.findOne({
-        $or: [{ email: userData.email }, { username: userData.username }]
+        $or: [
+          { email: userData.email.toLowerCase() },
+          { username: userData.username }
+        ]
       });
 
       if (existingUser) {
@@ -52,6 +57,8 @@ export class AuthService {
         email: userData.email,
         password: hashedPassword,
         role: userData.role || UserRole.USER,
+        department: userData.department || (userData.role === UserRole.AGENT ? Department.GENERAL_SUPPORT : Department.UNKNOWN),
+        specialization: userData.specialization || '',
         status: UserStatus.OFFLINE
       });
 
