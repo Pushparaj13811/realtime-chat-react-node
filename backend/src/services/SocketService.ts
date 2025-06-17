@@ -54,19 +54,27 @@ export class SocketService implements ISocketService {
     // Authentication middleware
     this.io.use(async (socket, next) => {
       try {
+        console.log('🔐 SocketService: Authenticating socket connection...');
         const sessionId = socket.handshake.auth.sessionId;
+        
         if (!sessionId) {
+          console.error('❌ SocketService: No session ID provided');
           return next(new Error('Authentication error: No session ID'));
         }
 
+        console.log('🔍 SocketService: Validating session:', sessionId);
         const session = await this.authService.validateSession(sessionId);
+        
         if (!session) {
+          console.error('❌ SocketService: Invalid session ID:', sessionId);
           return next(new Error('Authentication error: Invalid session'));
         }
 
+        console.log('✅ SocketService: Session validated for user:', session.username);
         socket.data.user = session;
         next();
       } catch (error) {
+        console.error('❌ SocketService: Authentication error:', error);
         next(new Error('Authentication error'));
       }
     });
