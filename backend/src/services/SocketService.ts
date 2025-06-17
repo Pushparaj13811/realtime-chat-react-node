@@ -430,12 +430,23 @@ export class SocketService implements ISocketService {
     try {
       const user: AuthSession = socket.data.user;
       
-      socket.to(data.chatRoomId).emit('user-typing', {
+      console.log(`⌨️ SocketService: Handling typing event from ${user.username}:`, {
+        chatRoomId: data.chatRoomId,
+        isTyping: data.isTyping,
+        userId: user.userId
+      });
+      
+      const typingData = {
         userId: user.userId,
         username: user.username,
         chatRoomId: data.chatRoomId,
         isTyping: data.isTyping
-      });
+      };
+      
+      // Broadcast to other users in the room (excluding sender)
+      socket.to(data.chatRoomId).emit('user-typing', typingData);
+      
+      console.log(`⌨️ SocketService: Broadcasted typing event to room ${data.chatRoomId} (excluding sender)`);
     } catch (error) {
       console.error('Typing error:', error);
     }
