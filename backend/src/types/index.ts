@@ -123,4 +123,18 @@ export type ApiErrorResponse = {
   errors?: any[];
 };
 
-export type ApiResponse<T = any> = ApiSuccessResponse<T> | ApiErrorResponse; 
+export type ApiResponse<T = any> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+// Express Request extension for authentication
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        username: string;
+        role: UserRole;
+        email: string;
+      };
+    }
+  }
+} 

@@ -240,13 +240,17 @@ export class SocketService implements ISocketService {
       );
       const isAssignedAgent = this.extractId(chatRoom.assignedAgent) === user.userId;
 
+      const participantIds = chatRoom.participants.map(p => this.extractId(p));
+      const assignedAgentId = this.extractId(chatRoom.assignedAgent);
+      
       console.log(`🔍 SocketService: Room access check for ${user.username}:`, {
         chatRoomId,
         userId: user.userId,
         isParticipant,
         isAssignedAgent,
-        participantIds: chatRoom.participants.map(p => this.extractId(p)),
-        assignedAgentId: this.extractId(chatRoom.assignedAgent)
+        participantIds,
+        assignedAgentId,
+        participantObjects: chatRoom.participants.map(p => ({ id: this.extractId(p), type: typeof p }))
       });
 
       if (!isParticipant && !isAssignedAgent) {
@@ -606,7 +610,12 @@ export class SocketService implements ISocketService {
   private extractId(id: any): string | undefined {
     if (!id) return undefined;
     if (typeof id === 'string') return id;
-    if (typeof id === 'object' && id.toString) return id.toString();
+    if (typeof id === 'object') {
+      // Handle populated mongoose documents
+      if (id._id) return id._id.toString();
+      // Handle ObjectId
+      if (id.toString) return id.toString();
+    }
     return undefined;
   }
 }
