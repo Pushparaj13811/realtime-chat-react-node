@@ -218,6 +218,11 @@ export class SocketService implements ISocketService {
     socket.on('get-online-agents', async () => {
       await this.handleGetOnlineAgents(socket);
     });
+
+    // Set active chat room for user
+    socket.on('set-active-chat', async (data: { chatRoomId: string | null }) => {
+      await this.handleSetActiveChat(socket, data);
+    });
   }
 
   // Handle joining a chat room
@@ -354,15 +359,23 @@ export class SocketService implements ISocketService {
         }
       });
 
-      // Mark as delivered for online users in the room
+      // Mark as delivered only for users actively viewing this chat room
       const roomSockets = await this.io.in(data.chatRoomId).fetchSockets();
       const messageId = this.extractId(message._id) || this.extractId(message.id) || '';
       
       if (messageId) {
         for (const roomSocket of roomSockets) {
           const roomUser: AuthSession = roomSocket.data.user;
-          if (roomUser.userId !== user.userId) {
+          // Only mark as delivered if user is actively viewing this chat room
+          if (roomUser.userId !== user.userId && roomSocket.data.activeChatRoomId === data.chatRoomId) {
             await this.messageService.markAsDelivered(messageId, roomUser.userId);
+            
+            // Notify sender about delivery
+            this.io.emit('message-status-updated', {
+              messageId: messageId,
+              status: 'delivered',
+              userId: roomUser.userId
+            });
           }
         }
       }
@@ -500,6 +513,52 @@ export class SocketService implements ISocketService {
     } catch (error) {
       console.error('Get online agents error:', error);
       socket.emit('online-agents', []); // Send empty array on error
+    }
+  }
+
+  // Handle setting active chat room for user
+  private async handleSetActiveChat(socket: Socket, data: { chatRoomId: string | null }): Promise<void> {
+    try {
+      const user: AuthSession = socket.data.user;
+      
+      console.log(`🎯 SocketService: User ${user.username} set active chat:`, data.chatRoomId);
+      
+      // Store the active chat room in socket data for message status logic
+      socket.data.activeChatRoomId = data.chatRoomId;
+      
+      // If user is viewing a chat room, mark undelivered messages in that room as delivered
+      if (data.chatRoomId) {
+        const messages = await this.messageService.getMessages({
+          chatRoomId: data.chatRoomId,
+          limit: 50
+        });
+        
+        // Mark undelivered messages as delivered
+        for (const message of messages) {
+          const messageId = this.extractId(message._id) || this.extractId(message.id) || '';
+          const senderId = this.extractId(message.senderId) || '';
+          
+          if (messageId && senderId !== user.userId) {
+            // Check if not already delivered to this user
+            const isDelivered = message.deliveredTo?.some(delivery => 
+              delivery.userId.toString() === user.userId
+            );
+            
+            if (!isDelivered) {
+              await this.messageService.markAsDelivered(messageId, user.userId);
+              
+              // Notify sender about delivery
+              this.io.emit('message-status-updated', {
+                messageId: messageId,
+                status: 'delivered',
+                userId: user.userId
+              });
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Set active chat error:', error);
     }
   }
 

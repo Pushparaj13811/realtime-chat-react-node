@@ -1,7 +1,6 @@
 import { Message, MessageStatus, MessageType } from '../models/Message.js';
 import type { IMessage } from '../models/Message.js';
 import { ChatRoom } from '../models/ChatRoom.js';
-import type { IChatRoom } from '../models/ChatRoom.js';
 import { CacheService } from './CacheService.js';
 import mongoose from 'mongoose';
 
@@ -176,18 +175,39 @@ export class MessageService {
         return false;
       }
 
+      // Don't allow reading own messages
+      if (message.senderId.toString() === userId) {
+        return false;
+      }
+
       // Check if already marked as read by this user
       const alreadyRead = message.readBy.some(
         read => read.userId.toString() === userId
       );
 
       if (!alreadyRead) {
+        // Ensure the message is marked as delivered first
+        const alreadyDelivered = message.deliveredTo.some(
+          delivery => delivery.userId.toString() === userId
+        );
+
+        if (!alreadyDelivered) {
+          message.deliveredTo.push({
+            userId: new mongoose.Types.ObjectId(userId),
+            deliveredAt: new Date()
+          });
+        }
+
         message.readBy.push({
           userId: new mongoose.Types.ObjectId(userId),
           readAt: new Date()
         });
 
-        message.status = MessageStatus.READ;
+        // Update status based on delivery/read state
+        if (message.status === MessageStatus.SENT || message.status === MessageStatus.DELIVERED) {
+          message.status = MessageStatus.READ;
+        }
+
         await message.save();
 
         // Update cache
@@ -234,6 +254,36 @@ export class MessageService {
     } catch (error) {
       console.error('Get unread count error:', error);
       return 0;
+    }
+  }
+
+  // Get unread count per chat room for a user
+  async getUnreadCountsPerRoom(userId: string): Promise<{ [chatRoomId: string]: number }> {
+    try {
+      const unreadCounts = await Message.aggregate([
+        {
+          $match: {
+            'readBy.userId': { $ne: new mongoose.Types.ObjectId(userId) },
+            senderId: { $ne: new mongoose.Types.ObjectId(userId) }
+          }
+        },
+        {
+          $group: {
+            _id: '$chatRoomId',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const result: { [chatRoomId: string]: number } = {};
+      unreadCounts.forEach(item => {
+        result[item._id.toString()] = item.count;
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Get unread counts per room error:', error);
+      return {};
     }
   }
 

@@ -23,7 +23,8 @@ export enum MessageType {
 export enum MessageStatus {
   SENT = 'sent',
   DELIVERED = 'delivered',
-  READ = 'read'
+  READ = 'read',
+  FAILED = 'failed'
 }
 
 // Chat room related types
@@ -99,6 +100,7 @@ export type SocketEventType =
   | 'agent-status-update'
   | 'get-online-users'
   | 'get-online-agents'
+  | 'set-active-chat'
   | 'new-message'
   | 'user-joined-room'
   | 'user-left-room'

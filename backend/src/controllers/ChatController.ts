@@ -298,13 +298,25 @@ export class ChatController {
         throw new ApiError(401, 'Authentication required');
       }
 
-      const unreadCount = await this.messageService.getUnreadCount(
-        userId,
-        chatRoomId as string
-      );
-
-      const response = new ApiResponse(200, 'Unread count fetched', unreadCount);
-      res.status(200).json(response.toJSON());
+      if (chatRoomId) {
+        // Get count for specific room
+        const unreadCount = await this.messageService.getUnreadCount(
+          userId,
+          chatRoomId as string
+        );
+        const response = new ApiResponse(200, 'Unread count fetched', { count: unreadCount });
+        res.status(200).json(response.toJSON());
+      } else {
+        // Get counts for all rooms
+        const unreadCounts = await this.messageService.getUnreadCountsPerRoom(userId);
+        const totalCount = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+        
+        const response = new ApiResponse(200, 'Unread counts fetched', {
+          total: totalCount,
+          perRoom: unreadCounts
+        });
+        res.status(200).json(response.toJSON());
+      }
     } catch (error) {
       console.error('Get unread count error:', error);
       throw new ApiError(500, 'Internal server error');
