@@ -514,4 +514,111 @@ export class ChatController {
       throw new ApiError(500, 'Internal server error');
     }
   };
+
+  // Admin: Transfer agent to another chat room
+  transferAgentAdmin = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userRole = (req as any).user?.role;
+      const { chatRoomId, newAgentId, reason } = req.body;
+
+      // Only admins can transfer agents
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      if (!chatRoomId || !newAgentId) {
+        throw new ApiError(400, 'Chat room ID and new agent ID are required');
+      }
+
+      const success = await this.chatRoomService.assignAgent({
+        chatRoomId,
+        agentId: newAgentId,
+        reason: reason || 'Admin transfer'
+      });
+
+      if (success) {
+        const response = new ApiResponse(200, 'Agent transferred successfully', null);
+        res.status(200).json(response.toJSON());
+      } else {
+        const response = new ApiResponse(400, 'Failed to transfer agent', null);
+        res.status(400).json(response.toJSON());
+      }
+    } catch (error) {
+      console.error('Transfer agent error:', error);
+      throw new ApiError(500, 'Internal server error during agent transfer');
+    }
+  };
+
+  // Admin: Assign agent to chat room
+  assignAgentAdmin = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userRole = (req as any).user?.role;
+      const { chatRoomId, agentId, reason } = req.body;
+
+      // Only admins can assign agents
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      if (!chatRoomId || !agentId) {
+        throw new ApiError(400, 'Chat room ID and agent ID are required');
+      }
+
+      const success = await this.chatRoomService.assignAgent({
+        chatRoomId,
+        agentId,
+        reason: reason || 'Admin assignment'
+      });
+
+      if (success) {
+        const response = new ApiResponse(200, 'Agent assigned successfully', null);
+        res.status(200).json(response.toJSON());
+      } else {
+        const response = new ApiResponse(400, 'Failed to assign agent', null);
+        res.status(400).json(response.toJSON());
+      }
+    } catch (error) {
+      console.error('Assign agent error:', error);
+      throw new ApiError(500, 'Internal server error during agent assignment');
+    }
+  };
+
+  // Admin: Remove agent from chat room  
+  removeAgentAdmin = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
+      const { chatRoomId, reason } = req.body;
+
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
+
+      // Only admins can remove agents
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
+
+      if (!chatRoomId) {
+        throw new ApiError(400, 'Chat room ID is required');
+      }
+
+      const success = await this.chatRoomService.removeAgentFromChat(
+        chatRoomId, 
+        userId, 
+        reason || 'Admin removal'
+      );
+
+      if (success) {
+        const response = new ApiResponse(200, 'Agent removed successfully', null);
+        res.status(200).json(response.toJSON());
+      } else {
+        const response = new ApiResponse(400, 'Failed to remove agent', null);
+        res.status(400).json(response.toJSON());
+      }
+    } catch (error) {
+      console.error('Remove agent error:', error);
+      throw new ApiError(500, 'Internal server error during agent removal');
+    }
+  };
 } 
