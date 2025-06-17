@@ -51,18 +51,35 @@ export class ChatRoomService {
   // Create a new chat room
   async createChatRoom(data: CreateChatRoomData): Promise<IChatRoom | null> {
     try {
+      console.log(`🏗️ ChatRoomService: Creating chat room with data:`, data);
+
       // Validate participants exist
       const participantIds = data.participants.map(id => new mongoose.Types.ObjectId(id));
       const participants = await User.find({ _id: { $in: participantIds } });
       
       if (participants.length !== data.participants.length) {
+        console.error(`❌ ChatRoomService: Some participants not found. Expected: ${data.participants.length}, Found: ${participants.length}`);
         throw new Error('Some participants not found');
       }
+
+      console.log(`👥 ChatRoomService: Validated participants:`, participants.map(p => ({ id: p._id, username: p.username })));
 
       // For support chats, auto-assign an available agent if not specified
       let assignedAgent = data.assignedAgent;
       if (data.type === ChatRoomType.SUPPORT && !assignedAgent) {
+        console.log(`🔍 ChatRoomService: Finding available agent for department: ${data.metadata?.department}`);
         assignedAgent = await this.findAvailableAgent(data.metadata?.department, data.metadata?.priority) || undefined;
+        
+        if (assignedAgent) {
+          console.log(`✅ ChatRoomService: Found available agent: ${assignedAgent}`);
+          // Add assigned agent to participants if not already included
+          if (!data.participants.includes(assignedAgent)) {
+            participantIds.push(new mongoose.Types.ObjectId(assignedAgent));
+            console.log(`➕ ChatRoomService: Added agent to participants. New count: ${participantIds.length}`);
+          }
+        } else {
+          console.warn(`⚠️ ChatRoomService: No available agent found for department: ${data.metadata?.department}`);
+        }
       }
 
       const chatRoom = new ChatRoom({

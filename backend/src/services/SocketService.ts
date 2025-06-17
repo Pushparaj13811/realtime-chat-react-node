@@ -225,9 +225,12 @@ export class SocketService implements ISocketService {
       const user: AuthSession = socket.data.user;
       const { chatRoomId } = data;
 
+      console.log(`🏠 SocketService: User ${user.username} trying to join room ${chatRoomId}`);
+
       // Verify user has access to this chat room
       const chatRoom = await this.chatRoomService.getChatRoomById(chatRoomId);
       if (!chatRoom) {
+        console.error(`❌ SocketService: Chat room ${chatRoomId} not found`);
         socket.emit('error', { message: 'Chat room not found' });
         return;
       }
@@ -237,7 +240,17 @@ export class SocketService implements ISocketService {
       );
       const isAssignedAgent = this.extractId(chatRoom.assignedAgent) === user.userId;
 
+      console.log(`🔍 SocketService: Room access check for ${user.username}:`, {
+        chatRoomId,
+        userId: user.userId,
+        isParticipant,
+        isAssignedAgent,
+        participantIds: chatRoom.participants.map(p => this.extractId(p)),
+        assignedAgentId: this.extractId(chatRoom.assignedAgent)
+      });
+
       if (!isParticipant && !isAssignedAgent) {
+        console.error(`❌ SocketService: Access denied to room ${chatRoomId} for user ${user.username}`);
         socket.emit('error', { message: 'Access denied to chat room' });
         return;
       }
@@ -297,6 +310,11 @@ export class SocketService implements ISocketService {
   private async handleSendMessage(socket: Socket, data: ChatMessage): Promise<void> {
     try {
       const user: AuthSession = socket.data.user;
+      
+      console.log(`💬 SocketService: User ${user.username} sending message to room ${data.chatRoomId}:`, {
+        content: data.content,
+        messageType: data.messageType
+      });
       
       // Create message in database
       const message = await this.messageService.createMessage({

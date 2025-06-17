@@ -22,20 +22,32 @@ export class ChatController {
   createChatRoom = async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = (req as any).user?.userId;
-      const { type, participants, name, assignedAgent, metadata } = req.body;
+      const { type, participants = [], name, assignedAgent, metadata } = req.body;
 
       if (!userId) {
         throw new ApiError(401, 'Authentication required');
       }
 
-      if (!type || !participants || !Array.isArray(participants)) {
-        throw new ApiError(400, 'Type and participants array are required');
+      if (!type) {
+        throw new ApiError(400, 'Type is required');
       }
 
+      console.log(`📝 ChatController: Creating chat room for user ${userId}:`, {
+        type,
+        participants,
+        assignedAgent,
+        metadata
+      });
+
+      // Ensure participants is an array
+      const participantIds = Array.isArray(participants) ? participants : [];
+      
       // Add current user to participants if not already included
-      const allParticipants = participants.includes(userId) 
-        ? participants 
-        : [...participants, userId];
+      const allParticipants = participantIds.includes(userId) 
+        ? participantIds 
+        : [...participantIds, userId];
+
+      console.log(`👥 ChatController: Final participants list:`, allParticipants);
 
       const chatRoom = await this.chatRoomService.createChatRoom({
         type,
