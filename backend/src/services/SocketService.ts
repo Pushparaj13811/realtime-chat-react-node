@@ -14,6 +14,8 @@ import type {
   AuthSession
 } from '../interfaces/services.interfaces.js';
 import { config } from '../config/config.js';
+import { User } from '../models/User.js';
+import { UserRole } from '../types/index.js';
 
 export class SocketService implements ISocketService {
   private static instance: SocketService;
@@ -74,7 +76,53 @@ export class SocketService implements ISocketService {
       this.handleConnection(socket);
     });
 
+    // Start periodic cleanup of stale connections
+    this.startStatusCleanup();
+
     console.log('Socket.IO server initialized');
+  }
+
+  // Periodic cleanup of stale connections and status synchronization
+  private startStatusCleanup(): void {
+    setInterval(async () => {
+      try {
+        console.log('SocketService: Running status cleanup...');
+        
+        // Get all users marked as online in database
+        const onlineUsersInDB = await User.find({ isOnline: true }).select('_id username');
+        
+        // Get actually connected user IDs
+        const connectedUserIds = Array.from(this.connectedUsers.values()).map(u => u.userId);
+        
+        // Find users marked as online but not connected
+        const staleOnlineUsers = onlineUsersInDB.filter(user => 
+          !connectedUserIds.includes((user._id as any).toString())
+        );
+        
+        // Mark stale users as offline
+        if (staleOnlineUsers.length > 0) {
+          console.log(`SocketService: Marking ${staleOnlineUsers.length} stale users as offline`);
+          await User.updateMany(
+            { _id: { $in: staleOnlineUsers.map(u => u._id) } },
+            { 
+              isOnline: false, 
+              status: UserStatus.OFFLINE,
+              lastSeen: new Date(),
+              socketId: undefined
+            }
+          );
+          
+          // Broadcast status changes
+          for (const user of staleOnlineUsers) {
+            await this.broadcastUserStatusChange((user._id as any).toString(), UserStatus.OFFLINE);
+          }
+        }
+        
+        console.log(`SocketService: Status cleanup complete. ${connectedUserIds.length} users connected, ${staleOnlineUsers.length} stale users cleaned`);
+      } catch (error) {
+        console.error('SocketService: Status cleanup error:', error);
+      }
+    }, 60000); // Run every minute
   }
 
   // Handle new socket connection
@@ -365,10 +413,29 @@ export class SocketService implements ISocketService {
   // Handle get online users request
   private async handleGetOnlineUsers(socket: Socket): Promise<void> {
     try {
-      // Get currently connected users from the socket connections
-      const onlineUsers = Array.from(this.connectedUsers.values());
+      // Get currently connected users from the socket connections who are also marked as online in database
+      const connectedUserIds = Array.from(this.connectedUsers.values()).map(user => user.userId);
       
-      socket.emit('online-users', onlineUsers);
+      // Verify these users are actually online in the database
+      const onlineUsers = await User.find({
+        _id: { $in: connectedUserIds },
+        isOnline: true
+      }).select('_id username role status');
+
+             // Map to SocketUser format
+       const socketUsers = onlineUsers.map(user => {
+         const connectedUser = Array.from(this.connectedUsers.values())
+           .find(cu => cu.userId === (user._id as any).toString());
+         
+         return {
+           userId: (user._id as any).toString(),
+           username: user.username,
+           role: user.role,
+           socketId: connectedUser?.socketId || ''
+         };
+       });
+      
+      socket.emit('online-users', socketUsers);
     } catch (error) {
       console.error('Get online users error:', error);
       socket.emit('online-users', []); // Send empty array on error
@@ -378,18 +445,17 @@ export class SocketService implements ISocketService {
   // Handle get online agents request
   private async handleGetOnlineAgents(socket: Socket): Promise<void> {
     try {
-      // Get agents who are currently connected via sockets
-      const connectedAgents = Array.from(this.connectedUsers.values())
-        .filter(user => user.role === 'agent' || user.role === 'admin');
+      // Get agents who are currently connected via sockets AND marked as online in database
+      const connectedAgentIds = Array.from(this.connectedUsers.values())
+        .filter(user => user.role === 'agent' || user.role === 'admin')
+        .map(user => user.userId);
       
       // Get full agent data from database for connected agents
-      const onlineAgents = [];
-      for (const connectedAgent of connectedAgents) {
-        const fullAgentData = await this.authService.getUserById(connectedAgent.userId);
-        if (fullAgentData) {
-          onlineAgents.push(fullAgentData);
-        }
-      }
+      const onlineAgents = await User.find({
+        _id: { $in: connectedAgentIds },
+        isOnline: true,
+        role: { $in: [UserRole.AGENT, UserRole.ADMIN] }
+      }).select('-password');
 
       socket.emit('online-agents', onlineAgents);
     } catch (error) {

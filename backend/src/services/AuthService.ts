@@ -258,8 +258,12 @@ export class AuthService {
   // Get online agents
   async getOnlineAgents(): Promise<IUser[]> {
     try {
+      // Get agents who are marked as online AND have active sessions
+      const activeSessionUserIds = Array.from(this.activeSessions.values()).map(session => session.userId);
+      
       return await User.find({
-        role: UserRole.AGENT,
+        _id: { $in: activeSessionUserIds },
+        role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
         isOnline: true
       }).select('-password');
     } catch (error) {
