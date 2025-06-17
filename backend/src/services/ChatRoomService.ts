@@ -3,6 +3,8 @@ import type { IChatRoom } from '../models/ChatRoom.js';
 import { User, UserRole } from '../models/User.js';
 import { CacheService } from './CacheService.js';
 import { AuthService } from './AuthService.js';
+import { MessageService } from './MessageService.js';
+import { MessageType } from '../models/Message.js';
 import mongoose from 'mongoose';
 
 export interface CreateChatRoomData {
@@ -111,6 +113,43 @@ export class ChatRoomService {
         { path: 'assignedAgent', select: 'username email role status isOnline' },
         { path: 'createdBy', select: 'username email role' }
       ]);
+
+      // Automatically send the subject as the first message for support chats
+      if (data.type === ChatRoomType.SUPPORT && data.metadata?.subject) {
+        try {
+          const messageService = MessageService.getInstance();
+          let welcomeMessage = `Hello! I need help with: **${data.metadata.subject}**`;
+          
+          // Add department and priority info if available
+          if (data.metadata.department) {
+            welcomeMessage += `\n\n**Department:** ${data.metadata.department}`;
+          }
+          if (data.metadata.problemType) {
+            welcomeMessage += `\n**Issue Type:** ${data.metadata.problemType}`;
+          }
+          if (data.metadata.priority && data.metadata.priority !== 'medium') {
+            welcomeMessage += `\n**Priority:** ${data.metadata.priority}`;
+          }
+          
+          await messageService.createMessage({
+            chatRoomId: (chatRoom._id as mongoose.Types.ObjectId).toString(),
+            senderId: data.createdBy,
+            content: welcomeMessage,
+            messageType: MessageType.TEXT,
+            metadata: {
+              isChatInitial: true,
+              subject: data.metadata.subject,
+              department: data.metadata.department,
+              problemType: data.metadata.problemType
+            }
+          });
+
+          console.log(`📧 ChatRoomService: Initial message sent to chat room ${chatRoom._id} for subject: ${data.metadata.subject}`);
+        } catch (error) {
+          console.error('Error sending initial chat message:', error);
+          // Don't fail the entire operation if message sending fails
+        }
+      }
 
       return chatRoom;
     } catch (error) {

@@ -3,7 +3,9 @@ import { User } from '../models/User.js';
 import { Department, ProblemType, UserRole } from '../types/index.js';
 import { ApiError } from '../utils/apiError.js';
 import { ChatRoomService } from './ChatRoomService.js';
+import { MessageService } from './MessageService.js';
 import { ChatRoomType } from '../models/ChatRoom.js';
+import { MessageType } from '../models/Message.js';
 import mongoose from 'mongoose';
 
 export class SupportTicketService {
@@ -99,6 +101,29 @@ export class SupportTicketService {
     ticket.assignedAt = new Date();
 
     await ticket.save();
+
+    // Automatically send the ticket description as the first message
+    try {
+      const messageService = MessageService.getInstance();
+      const welcomeMessage = `**Support Ticket #${ticket.ticketNumber}**\n\n**Issue:** ${ticket.title}\n\n**Description:**\n${ticket.description}`;
+      
+      await messageService.createMessage({
+        chatRoomId: (chatRoom._id as mongoose.Types.ObjectId).toString(),
+        senderId: ticket.createdBy.toString(),
+        content: welcomeMessage,
+        messageType: MessageType.TEXT,
+        metadata: {
+          isTicketInitial: true,
+          ticketId: (ticket._id as mongoose.Types.ObjectId).toString(),
+          ticketNumber: ticket.ticketNumber
+        }
+      });
+
+      console.log(`📧 SupportTicketService: Initial message sent to chat room ${chatRoom._id} for ticket ${ticket.ticketNumber}`);
+    } catch (error) {
+      console.error('Error sending initial ticket message:', error);
+      // Don't fail the entire operation if message sending fails
+    }
 
     console.log(`✅ SupportTicketService: Ticket ${ticket.ticketNumber} assigned to ${agent.username} with chat room ${chatRoom._id}`);
 
