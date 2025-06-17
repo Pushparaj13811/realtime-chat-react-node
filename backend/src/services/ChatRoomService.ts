@@ -1,4 +1,4 @@
-import { ChatRoom, ChatRoomType, ChatRoomStatus, Department, ProblemType } from '../models/ChatRoom.js';
+import { ChatRoom, ChatRoomType, ChatRoomStatus } from '../models/ChatRoom.js';
 import type { IChatRoom } from '../models/ChatRoom.js';
 import { User, UserRole } from '../models/User.js';
 import { CacheService } from './CacheService.js';
@@ -16,8 +16,6 @@ export interface CreateChatRoomData {
   metadata?: {
     subject?: string;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
-    department?: Department;
-    problemType?: ProblemType;
     tags?: string[];
     customerInfo?: {
       name?: string;
@@ -69,8 +67,8 @@ export class ChatRoomService {
       // For support chats, auto-assign an available agent if not specified
       let assignedAgent = data.assignedAgent;
       if (data.type === ChatRoomType.SUPPORT && !assignedAgent) {
-        console.log(`🔍 ChatRoomService: Finding available agent for department: ${data.metadata?.department}`);
-        assignedAgent = await this.findAvailableAgent(data.metadata?.department, data.metadata?.priority) || undefined;
+        console.log(`🔍 ChatRoomService: Finding available agent for support chat`);
+        assignedAgent = await this.findAvailableAgent() || undefined;
         
         if (assignedAgent) {
           console.log(`✅ ChatRoomService: Found available agent: ${assignedAgent}`);
@@ -80,7 +78,7 @@ export class ChatRoomService {
             console.log(`➕ ChatRoomService: Added agent to participants. New count: ${participantIds.length}`);
           }
         } else {
-          console.warn(`⚠️ ChatRoomService: No available agent found for department: ${data.metadata?.department}`);
+          console.warn(`⚠️ ChatRoomService: No available agent found for support chat`);
         }
       }
 
@@ -118,18 +116,7 @@ export class ChatRoomService {
       if (data.type === ChatRoomType.SUPPORT && data.metadata?.subject) {
         try {
           const messageService = MessageService.getInstance();
-          let welcomeMessage = `Hello! I need help with: **${data.metadata.subject}**`;
-          
-          // Add department and priority info if available
-          if (data.metadata.department) {
-            welcomeMessage += `\n\n**Department:** ${data.metadata.department}`;
-          }
-          if (data.metadata.problemType) {
-            welcomeMessage += `\n**Issue Type:** ${data.metadata.problemType}`;
-          }
-          if (data.metadata.priority && data.metadata.priority !== 'medium') {
-            welcomeMessage += `\n**Priority:** ${data.metadata.priority}`;
-          }
+          const welcomeMessage = `Hello! I need help with: **${data.metadata.subject}**`;
           
           await messageService.createMessage({
             chatRoomId: (chatRoom._id as mongoose.Types.ObjectId).toString(),
@@ -138,9 +125,7 @@ export class ChatRoomService {
             messageType: MessageType.TEXT,
             metadata: {
               isChatInitial: true,
-              subject: data.metadata.subject,
-              department: data.metadata.department,
-              problemType: data.metadata.problemType
+              subject: data.metadata.subject
             }
           });
 
@@ -274,10 +259,10 @@ export class ChatRoomService {
     }
   }
 
-  // Find available agent based on department and workload
-  async findAvailableAgent(department?: Department, priority?: string): Promise<string | null> {
+  // Find available agent based on workload
+  async findAvailableAgent(): Promise<string | null> {
     try {
-      console.log(`🔍 Finding agent for department: ${department}, priority: ${priority}`);
+      console.log(`🔍 Finding available agent`);
       
       // Build query for agents
       const agentQuery: any = {
@@ -285,33 +270,9 @@ export class ChatRoomService {
         isOnline: true
       };
 
-      // If department is specified, prefer agents from that department
-      if (department && department !== Department.OTHER) {
-        agentQuery.department = department;
-      }
-
-      // Get agents matching criteria
-      let availableAgents = await User.find(agentQuery).lean();
-      console.log(`📋 Found ${availableAgents.length} agents for department ${department}`);
-
-      // If no department-specific agents found, get general agents
-      if (availableAgents.length === 0 && department !== Department.GENERAL_SUPPORT) {
-        console.log('🔄 No department-specific agents, trying general support...');
-        availableAgents = await User.find({
-          role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
-          isOnline: true,
-          department: { $in: [Department.GENERAL_SUPPORT, Department.OTHER] }
-        }).lean();
-      }
-
-      // If still no agents, get any available agent
-      if (availableAgents.length === 0) {
-        console.log('🔄 No general agents, trying any available agent...');
-        availableAgents = await User.find({
-          role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
-          isOnline: true
-        }).lean();
-      }
+      // Get available agents
+      const availableAgents = await User.find(agentQuery).lean();
+      console.log(`📋 Found ${availableAgents.length} available agents`);
 
       if (availableAgents.length === 0) {
         console.log('❌ No agents available');
@@ -333,22 +294,11 @@ export class ChatRoomService {
         })
       );
 
-      // Sort by workload (ascending) and then by department match
-      agentsWithWorkload.sort((a, b) => {
-        // Prioritize by department match first
-        const aDeptMatch = a.department === department ? 0 : 1;
-        const bDeptMatch = b.department === department ? 0 : 1;
-        
-        if (aDeptMatch !== bDeptMatch) {
-          return aDeptMatch - bDeptMatch;
-        }
-        
-        // Then by workload
-        return a.workload - b.workload;
-      });
+      // Sort by workload (ascending)
+      agentsWithWorkload.sort((a, b) => a.workload - b.workload);
 
       const selectedAgent = agentsWithWorkload[0];
-      console.log(`✅ Selected agent: ${selectedAgent.username} (workload: ${selectedAgent.workload}, dept: ${selectedAgent.department})`);
+      console.log(`✅ Selected agent: ${selectedAgent.username} (workload: ${selectedAgent.workload})`);
       
       return selectedAgent._id.toString();
     } catch (error) {
@@ -573,10 +523,7 @@ export class ChatRoomService {
       }
 
       // Find a new agent for this chat
-      const newAgentId = await this.findAvailableAgent(
-        chatRoom.metadata?.department,
-        chatRoom.metadata?.priority
-      );
+      const newAgentId = await this.findAvailableAgent();
 
       // Update chat room with new agent
       const updateData: any = {

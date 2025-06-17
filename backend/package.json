@@ -9,7 +9,9 @@
     "dev": "DEBUG=false nodemon --watch src --exec bun src/index.ts",
     "start": "node dist/index.js",
     "build": "bun build src/index.ts --outdir=dist --minify",
-    "build:tsc": "tsc"
+    "build:tsc": "tsc",
+    "seed": "bun src/scripts/seed.ts",
+    "seed:dev": "nodemon --exec bun src/scripts/seed.ts"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

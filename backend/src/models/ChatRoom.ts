@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ChatRoomType, ChatRoomStatus, Department, ProblemType } from '../types/index.js';
+import { ChatRoomType, ChatRoomStatus } from '../types/index.js';
 import type { IChatRoom } from '../interfaces/index.js';
 
 const chatRoomSchema = new Schema<IChatRoom>({
@@ -55,16 +55,6 @@ const chatRoomSchema = new Schema<IChatRoom>({
       name: String,
       email: String,
       phone: String
-    },
-    department: {
-      type: String,
-      enum: Object.values(Department),
-      default: Department.OTHER
-    },
-    problemType: {
-      type: String,
-      enum: Object.values(ProblemType),
-      default: ProblemType.OTHER
     }
   },
   transferHistory: [{
@@ -95,5 +85,5 @@ chatRoomSchema.index({ createdBy: 1 });
 chatRoomSchema.index({ isActive: 1 });
 
 export const ChatRoom = mongoose.model<IChatRoom>('ChatRoom', chatRoomSchema);
-export { ChatRoomType, ChatRoomStatus, Department, ProblemType } from '../types/index.js';
+export { ChatRoomType, ChatRoomStatus, Department } from '../types/index.js';
 export type { IChatRoom } from '../interfaces/index.js'; 
