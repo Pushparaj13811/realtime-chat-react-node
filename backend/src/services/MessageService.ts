@@ -110,12 +110,12 @@ export class MessageService {
         if (after) mongoQuery.createdAt.$gt = after;
       }
 
-      // Get from database
+      // Get from database (sort by createdAt ascending for chronological order)
       const messages = await Message.find(mongoQuery)
         .populate('senderId', 'username email role')
         .populate('receiverId', 'username email role')
         .populate('replyTo')
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: 1 })
         .limit(limit)
         .skip((page - 1) * limit);
 
@@ -283,7 +283,7 @@ export class MessageService {
         content: { $regex: searchTerm, $options: 'i' }
       })
         .populate('senderId', 'username email role')
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: 1 })
         .limit(limit);
     } catch (error) {
       console.error('Search messages error:', error);
