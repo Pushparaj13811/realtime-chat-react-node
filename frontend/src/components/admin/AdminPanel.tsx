@@ -1,50 +1,106 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Shield, 
   Users, 
-  UserPlus, 
-  Settings, 
-  BarChart, 
-  MessageSquare,
-  ArrowLeft,
-  Headphones,
-  UserCheck,
+  Shield, 
+  MessageSquare, 
   Activity,
-  Database
+  UserPlus,
+  Loader2,
+  AlertCircle,
+  Plus
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AgentRegistrationForm } from '@/components/auth/AgentRegistrationForm';
-import { UserRole } from '@/types';
+import type { User } from '@/types';
+import { UserRole, UserStatus } from '@/types';
+import apiService from '@/services/api';
 
-type AdminView = 'dashboard' | 'createAgent' | 'manageUsers' | 'analytics' | 'settings';
+export function AdminPanel() {
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'create-agent'>('dashboard');
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    activeAgents: 0,
+    activeChats: 0,
+    onlineUsers: 0
+  });
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const { state } = useAuth();
 
-interface AdminPanelProps {
-  onBackToChat?: () => void;
-}
+  // Fetch dashboard data
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch stats and users in parallel
+        const [statsResponse, usersResponse] = await Promise.all([
+          apiService.getAdminStats(),
+          apiService.getAllUsers()
+        ]);
 
-export function AdminPanel({ onBackToChat }: AdminPanelProps) {
-  const [currentView, setCurrentView] = useState<AdminView>('dashboard');
-  const { state: authState } = useAuth();
+        if (statsResponse.success && statsResponse.data) {
+          setStats(statsResponse.data);
+        } else {
+          throw new Error(statsResponse.message || 'Failed to fetch stats');
+        }
 
-  // Check if user has admin privileges
-  if (!authState.user || authState.user.role !== UserRole.ADMIN) {
+        if (usersResponse.success && usersResponse.data) {
+          setUsers(usersResponse.data);
+        } else {
+          throw new Error(usersResponse.message || 'Failed to fetch users');
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Verify admin access
+  if (!state.user || state.user.role !== UserRole.ADMIN) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <Card className="w-full max-w-md">
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-96">
           <CardContent className="p-6 text-center">
-            <Shield className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Access Denied
-            </h3>
-            <p className="text-gray-600 mb-4">
-              You need administrator privileges to access this panel.
-            </p>
-            <Button onClick={onBackToChat} variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Chat
+            <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-gray-600">You don't have permission to access the admin panel.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading dashboard...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-96">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Error</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>
+              Retry
             </Button>
           </CardContent>
         </Card>
@@ -52,63 +108,85 @@ export function AdminPanel({ onBackToChat }: AdminPanelProps) {
     );
   }
 
-  // Render different views based on currentView
-  if (currentView === 'createAgent') {
-    return (
-      <AgentRegistrationForm 
-        onBack={() => setCurrentView('dashboard')}
-        adminSessionId={authState.user.sessionId}
-      />
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <Card className="rounded-none border-x-0 border-t-0">
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Shield className="h-6 w-6 text-purple-600" />
-            <h1 className="text-xl font-bold text-gray-900">
-              Administration Panel
-            </h1>
-            <Badge variant="destructive" className="text-xs">
-              ADMIN ONLY
-            </Badge>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <div className="text-sm font-medium text-gray-900">
-                {authState.user.username}
-              </div>
-              <div className="text-xs text-gray-600">
-                Administrator
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-4">
+              <Shield className="h-8 w-8 text-purple-600" />
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
+                <p className="text-sm text-gray-500">System Administration</p>
               </div>
             </div>
-            
-            <Button onClick={onBackToChat} variant="outline" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Chat
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Badge variant="outline" className="text-purple-700">
+                <Shield className="h-3 w-3 mr-1" />
+                Admin
+              </Badge>
+            </div>
           </div>
         </div>
-      </Card>
+      </div>
 
-      <div className="p-6 max-w-7xl mx-auto">
-        {currentView === 'dashboard' && (
-          <>
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Navigation Tabs */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'dashboard'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Activity className="h-4 w-4 mr-2 inline" />
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'users'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Users className="h-4 w-4 mr-2 inline" />
+              Users
+            </button>
+            <button
+              onClick={() => setActiveTab('create-agent')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'create-agent'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <UserPlus className="h-4 w-4 mr-2 inline" />
+              Create Agent
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card>
                 <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center">
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      <Users className="h-5 w-5 text-blue-600" />
+                      <Users className="h-6 w-6 text-blue-600" />
                     </div>
-                    <div>
+                    <div className="ml-4">
                       <p className="text-sm text-gray-600">Total Users</p>
-                      <p className="text-2xl font-bold text-gray-900">1,234</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -116,13 +194,13 @@ export function AdminPanel({ onBackToChat }: AdminPanelProps) {
 
               <Card>
                 <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center">
                     <div className="p-2 bg-green-100 rounded-lg">
-                      <Headphones className="h-5 w-5 text-green-600" />
+                      <Shield className="h-6 w-6 text-green-600" />
                     </div>
-                    <div>
+                    <div className="ml-4">
                       <p className="text-sm text-gray-600">Active Agents</p>
-                      <p className="text-2xl font-bold text-gray-900">42</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.activeAgents}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -130,244 +208,157 @@ export function AdminPanel({ onBackToChat }: AdminPanelProps) {
 
               <Card>
                 <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 rounded-lg">
-                      <MessageSquare className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Active Chats</p>
-                      <p className="text-2xl font-bold text-gray-900">89</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center">
                     <div className="p-2 bg-purple-100 rounded-lg">
-                      <Activity className="h-5 w-5 text-purple-600" />
+                      <MessageSquare className="h-6 w-6 text-purple-600" />
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-600">System Status</p>
-                      <p className="text-2xl font-bold text-green-600">Healthy</p>
+                    <div className="ml-4">
+                      <p className="text-sm text-gray-600">Active Chats</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.activeChats}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            </div>
 
-            {/* Main Actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* User Management */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <UserPlus className="h-5 w-5" />
-                    User Management
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-gray-600 text-sm">
-                    Create and manage user accounts, including agents and administrators.
-                  </p>
-                  
-                  <div className="space-y-3">
-                    <Button 
-                      onClick={() => setCurrentView('createAgent')}
-                      className="w-full justify-start"
-                      variant="outline"
-                    >
-                      <Headphones className="mr-2 h-4 w-4" />
-                      Create Support Agent Account
-                    </Button>
-                    
-                    <Button 
-                      onClick={() => setCurrentView('manageUsers')}
-                      className="w-full justify-start"
-                      variant="outline"
-                    >
-                      <Users className="mr-2 h-4 w-4" />
-                      Manage All Users
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* System Operations */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    System Operations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-gray-600 text-sm">
-                    Monitor system performance and configure application settings.
-                  </p>
-                  
-                  <div className="space-y-3">
-                    <Button 
-                      onClick={() => setCurrentView('analytics')}
-                      className="w-full justify-start"
-                      variant="outline"
-                    >
-                      <BarChart className="mr-2 h-4 w-4" />
-                      View Analytics & Reports
-                    </Button>
-                    
-                    <Button 
-                      onClick={() => setCurrentView('settings')}
-                      className="w-full justify-start"
-                      variant="outline"
-                    >
-                      <Database className="mr-2 h-4 w-4" />
-                      System Configuration
-                    </Button>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-yellow-100 rounded-lg">
+                      <Activity className="h-6 w-6 text-yellow-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm text-gray-600">Online Users</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.onlineUsers}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
             {/* Recent Activity */}
-            <div className="mt-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Administrative Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <UserCheck className="h-4 w-4 text-green-600 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          New agent account created
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Agent "john.smith" added to Customer Support department • 2 hours ago
-                        </p>
-                      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>System Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-sm font-medium">System Status</span>
                     </div>
-                    
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <Settings className="h-4 w-4 text-blue-600 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          System configuration updated
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Chat timeout settings modified • 1 day ago
-                        </p>
-                      </div>
+                    <Badge variant="outline" className="text-green-700 border-green-200">
+                      Operational
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-sm font-medium">Database</span>
                     </div>
-                    
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <Users className="h-4 w-4 text-purple-600 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          User permissions updated
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          Modified access levels for 3 users • 2 days ago
-                        </p>
+                    <Badge variant="outline" className="text-blue-700 border-blue-200">
+                      Connected
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>User Management</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {users.map((user) => (
+                  <div key={user._id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-3 h-3 rounded-full ${user.status === UserStatus.ONLINE ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                        <span className="font-medium">{user.username}</span>
                       </div>
+                      <Badge className={getRoleBadgeColor(user.role)}>
+                        {user.role}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-500">{user.email}</span>
+                      <Badge variant="outline">
+                        {user.status}
+                      </Badge>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'create-agent' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Agent</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AgentRegistrationForm adminSessionId={state.user?.sessionId} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Users Management */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium">User Management</h3>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 text-sm text-gray-500">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>{stats.onlineUsers} online</span>
+              </div>
+              <Button
+                size="sm"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Agent
+              </Button>
             </div>
-          </>
-        )}
+          </div>
 
-        {/* Placeholder views for other sections */}
-        {currentView === 'manageUsers' && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  User Management
-                </CardTitle>
-                <Button onClick={() => setCurrentView('dashboard')} variant="outline">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Dashboard
-                </Button>
+          {/* Real-time Status Monitor */}
+          <Card className="p-4 bg-blue-50 border-blue-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Activity className="h-4 w-4 text-blue-600" />
+              <h4 className="font-medium text-blue-900">Real-time Status Monitor</h4>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-600">{stats.onlineUsers}</div>
+                <div className="text-gray-600">Online Users</div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600">
-                User management interface would be implemented here. This would include:
-              </p>
-              <ul className="list-disc list-inside mt-4 space-y-2 text-sm text-gray-600">
-                <li>View all users with their roles and status</li>
-                <li>Edit user permissions and roles</li>
-                <li>Disable/enable user accounts</li>
-                <li>Reset user passwords</li>
-                <li>View user activity logs</li>
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
-        {currentView === 'analytics' && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart className="h-5 w-5" />
-                  Analytics & Reports
-                </CardTitle>
-                <Button onClick={() => setCurrentView('dashboard')} variant="outline">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Dashboard
-                </Button>
+              <div className="text-center">
+                <div className="text-lg font-bold text-blue-600">{stats.activeAgents}</div>
+                <div className="text-gray-600">Active Agents</div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600">
-                Analytics dashboard would be implemented here. This would include:
-              </p>
-              <ul className="list-disc list-inside mt-4 space-y-2 text-sm text-gray-600">
-                <li>Chat volume and response time metrics</li>
-                <li>Agent performance statistics</li>
-                <li>User engagement analytics</li>
-                <li>System performance monitoring</li>
-                <li>Custom report generation</li>
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
-        {currentView === 'settings' && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  System Configuration
-                </CardTitle>
-                <Button onClick={() => setCurrentView('dashboard')} variant="outline">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Dashboard
-                </Button>
+              <div className="text-center">
+                <div className="text-lg font-bold text-purple-600">{stats.activeChats}</div>
+                <div className="text-gray-600">Active Chats</div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-600">
-                System configuration interface would be implemented here. This would include:
-              </p>
-              <ul className="list-disc list-inside mt-4 space-y-2 text-sm text-gray-600">
-                <li>Application settings and parameters</li>
-                <li>Security and authentication configuration</li>
-                <li>Email and notification settings</li>
-                <li>Database and backup management</li>
-                <li>API and integration settings</li>
-              </ul>
-            </CardContent>
+            </div>
           </Card>
-        )}
+        </div>
       </div>
     </div>
   );
+
+  // Helper functions
+  function getRoleBadgeColor(role: UserRole) {
+    switch (role) {
+      case UserRole.ADMIN: return 'bg-purple-100 text-purple-800';
+      case UserRole.AGENT: return 'bg-blue-100 text-blue-800';
+      case UserRole.USER: return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  }
 } 

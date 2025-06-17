@@ -209,17 +209,46 @@ export function ChatProvider({ children }: ChatProviderProps) {
   // Setup socket event listeners
   useEffect(() => {
     if (!authState.isAuthenticated) {
+      console.log('ChatContext: Not authenticated, clearing chat data');
       dispatch({ type: 'CLEAR_CHAT_DATA' });
       return;
     }
 
+    console.log('ChatContext: Setting up socket event listeners for authenticated user');
+
     // Connection events
     socketService.on('connect', () => {
+      console.log('ChatContext: Socket connected successfully');
       dispatch({ type: 'SET_CONNECTION_STATUS', payload: true });
+      // Request fresh online data when connected
+      setTimeout(() => {
+        console.log('ChatContext: Refreshing online data after connection');
+        socketService.getOnlineUsers();
+        socketService.getOnlineAgents();
+        // Also refresh chat rooms to get updated participant status
+        refreshChatRooms();
+      }, 1000); // Small delay to ensure server is ready
+    });
+
+    socketService.on('connect_error', (error) => {
+      console.error('ChatContext: Socket connection error:', error);
+      dispatch({ type: 'SET_CONNECTION_STATUS', payload: false });
     });
 
     socketService.on('disconnect', () => {
+      console.log('ChatContext: Socket disconnected');
       dispatch({ type: 'SET_CONNECTION_STATUS', payload: false });
+      // Clear online users when disconnected
+      dispatch({ type: 'SET_ONLINE_USERS', payload: [] });
+      dispatch({ type: 'SET_ONLINE_AGENTS', payload: [] });
+    });
+
+    socketService.on('error', (error) => {
+      console.error('ChatContext: Socket error:', error);
+      // If authentication error, we might need to re-authenticate
+      if (error.message?.includes('Authentication error')) {
+        console.log('ChatContext: Authentication error detected, may need to re-login');
+      }
     });
 
     // Message events
@@ -248,12 +277,15 @@ export function ChatProvider({ children }: ChatProviderProps) {
       } else {
         dispatch({ 
           type: 'REMOVE_TYPING_USER', 
-          payload: { chatRoomId: data.chatRoomId, userId: data.userId } 
+          payload: { 
+            chatRoomId: data.chatRoomId, 
+            userId: data.userId 
+          } 
         });
       }
     });
 
-    // Status events
+    // Online status events
     socketService.on('online-users', (users) => {
       dispatch({ type: 'SET_ONLINE_USERS', payload: users });
     });
@@ -262,13 +294,32 @@ export function ChatProvider({ children }: ChatProviderProps) {
       dispatch({ type: 'SET_ONLINE_AGENTS', payload: agents });
     });
 
-    // Get initial data
+    socketService.on('user-status-changed', () => {
+      // Refresh online users when status changes
+      setTimeout(() => {
+        socketService.getOnlineUsers();
+        socketService.getOnlineAgents();
+      }, 500);
+    });
+
+    // Periodic refresh of online users (every 30 seconds)
+    const refreshInterval = setInterval(() => {
+      if (socketService.isConnected()) {
+        socketService.getOnlineUsers();
+        socketService.getOnlineAgents();
+      }
+    }, 30000);
+
+    // Initial data fetch
     if (socketService.isConnected()) {
+      refreshChatRooms();
       socketService.getOnlineUsers();
       socketService.getOnlineAgents();
     }
 
+    // Cleanup on unmount
     return () => {
+      clearInterval(refreshInterval);
       socketService.off('connect');
       socketService.off('disconnect');
       socketService.off('new-message');
@@ -277,6 +328,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
       socketService.off('user-typing');
       socketService.off('online-users');
       socketService.off('online-agents');
+      socketService.off('user-status-changed');
     };
   }, [authState.isAuthenticated]);
 
@@ -351,7 +403,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
   const sendMessage = (
     content: string, 
-    messageType: MessageType = 'TEXT' as never, 
+    messageType: MessageType = 'text', 
     replyTo?: string
   ) => {
     if (!state.currentChatRoom || !content.trim()) return;
@@ -363,6 +415,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
       replyTo,
     };
 
+    console.log('ChatContext: Sending message:', messageData);
     socketService.sendMessage(messageData);
   };
 

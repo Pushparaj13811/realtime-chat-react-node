@@ -2,9 +2,9 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Users, UserCheck, Headphones } from 'lucide-react';
+import {  UserCheck, Headphones, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { SocketUser, User, UserStatus } from '@/types';
+import type { SocketUser, User } from '@/types';
 
 interface OnlineUsersProps {
   onlineUsers: SocketUser[];
@@ -13,22 +13,43 @@ interface OnlineUsersProps {
 }
 
 export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: OnlineUsersProps) {
-  const getStatusColor = (status?: UserStatus) => {
-    switch (status) {
-      case 'ONLINE' as never:
-        return 'bg-green-500';
-      case 'AWAY' as never:
-        return 'bg-yellow-500';
-      case 'BUSY' as never:
-        return 'bg-red-500';
-      case 'OFFLINE' as never:
-      default:
+  // Debug logging for status issues
+  console.log('OnlineUsers - Agents:', onlineAgents.map(a => ({ username: a.username, status: a.status, isOnline: a.isOnline })));
+  console.log('OnlineUsers - Users:', onlineUsers.map(u => ({ username: u.username, role: u.role })));
+
+  const getStatusColor = (user: User | SocketUser) => {
+    // For User objects (agents), check both isOnline and status
+    if ('isOnline' in user && 'status' in user) {
+      if (!user.isOnline || user.status?.toLowerCase() === 'offline') {
         return 'bg-gray-400';
+      }
+      const normalizedStatus = user.status?.toLowerCase();
+      switch (normalizedStatus) {
+        case 'online':
+          return 'bg-green-500';
+        case 'away':
+          return 'bg-yellow-500';
+        case 'busy':
+          return 'bg-red-500';
+        default:
+          return 'bg-green-500'; // Default to online if connected
+      }
     }
+    // For SocketUser objects (connected users), assume online
+    return 'bg-green-500';
+  };
+
+  const getStatusText = (user: User | SocketUser) => {
+    if ('status' in user && 'isOnline' in user) {
+      if (!user.isOnline) return 'Offline';
+      return user.status?.toLowerCase() === 'online' ? 'Online' : (user.status || 'Online');
+    }
+    return 'Online';
   };
 
   const getRoleBadgeColor = (role: string) => {
-    switch (role) {
+    const normalizedRole = role?.toUpperCase();
+    switch (normalizedRole) {
       case 'ADMIN':
         return 'bg-red-100 text-red-800';
       case 'AGENT':
@@ -39,13 +60,18 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
     }
   };
 
-  const totalOnline = onlineUsers.length + onlineAgents.length;
+  // Filter out offline agents for display
+  const actuallyOnlineAgents = onlineAgents.filter(agent => 
+    agent.isOnline && agent.status?.toLowerCase() !== 'offline'
+  );
+
+  const totalOnline = onlineUsers.length + actuallyOnlineAgents.length;
 
   if (totalOnline === 0) {
     return (
       <Card className={cn("p-6", className)}>
         <div className="flex flex-col items-center justify-center text-gray-500">
-          <Users className="h-8 w-8 mb-2 opacity-50" />
+          <WifiOff className="h-8 w-8 mb-2 opacity-50" />
           <p className="text-sm">No users online</p>
         </div>
       </Card>
@@ -56,7 +82,7 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
     <Card className={cn("overflow-hidden", className)}>
       <div className="p-4 border-b bg-gray-50">
         <div className="flex items-center gap-2">
-          <Users className="h-4 w-4 text-gray-600" />
+          <Wifi className="h-4 w-4 text-green-600" />
           <h3 className="font-medium text-sm text-gray-900">
             Online ({totalOnline})
           </h3>
@@ -66,16 +92,16 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
       <ScrollArea className="max-h-80">
         <div className="p-4 space-y-4">
           {/* Online Agents */}
-          {onlineAgents.length > 0 && (
+          {actuallyOnlineAgents.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Headphones className="h-3 w-3 text-blue-600" />
                 <span className="text-xs font-medium text-gray-700">
-                  Agents ({onlineAgents.length})
+                  Support Agents ({actuallyOnlineAgents.length})
                 </span>
               </div>
               <div className="space-y-2">
-                {onlineAgents.map((agent) => (
+                {actuallyOnlineAgents.map((agent) => (
                   <div key={agent._id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
                     <div className="relative">
                       <Avatar className="h-8 w-8">
@@ -85,7 +111,7 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
                       </Avatar>
                       <div className={cn(
                         "absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-white rounded-full",
-                        getStatusColor(agent.status)
+                        getStatusColor(agent)
                       )}></div>
                     </div>
                     
@@ -101,9 +127,19 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
                           {agent.role}
                         </Badge>
                       </div>
-                      <span className="text-xs text-gray-500 capitalize">
-                        {agent.status.toLowerCase()}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500 capitalize">
+                          {getStatusText(agent)}
+                        </span>
+                        {agent.department && (
+                          <>
+                            <span className="text-xs text-gray-400">•</span>
+                            <span className="text-xs text-gray-400 capitalize">
+                              {agent.department.replace('_', ' ')}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -129,7 +165,10 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
                           {user.username.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 border-2 border-white rounded-full"></div>
+                      <div className={cn(
+                        "absolute -bottom-0.5 -right-0.5 h-3 w-3 border-2 border-white rounded-full",
+                        getStatusColor(user)
+                      )}></div>
                     </div>
                     
                     <div className="flex-1 min-w-0">
@@ -144,7 +183,9 @@ export function OnlineUsers({ onlineUsers, onlineAgents, className = '' }: Onlin
                           {user.role}
                         </Badge>
                       </div>
-                      <span className="text-xs text-gray-500">Online</span>
+                      <span className="text-xs text-gray-500">
+                        {getStatusText(user)}
+                      </span>
                     </div>
                   </div>
                 ))}

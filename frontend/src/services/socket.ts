@@ -14,6 +14,7 @@ interface SocketEvents {
   // Connection events
   connect: () => void;
   disconnect: () => void;
+  connect_error: (error: Error) => void;
   
   // Message events
   'new-message': (data: { message: Message; sender: { id: string; username: string; role: string } }) => void;
@@ -39,13 +40,29 @@ interface SocketEvents {
 class SocketService {
   private socket: Socket | null = null;
   private eventListeners: Map<string, Array<(...args: unknown[]) => void>> = new Map();
+  private currentSessionId: string | null = null;
 
   connect(sessionId: string): void {
+    console.log('🔌 SocketService: Attempting to connect with sessionId:', sessionId);
+    this.currentSessionId = sessionId;
+    
     if (this.socket?.connected) {
+      console.log('⚠️ SocketService: Already connected, skipping');
       return;
     }
 
-    this.socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+    // Disconnect existing socket if any
+    if (this.socket) {
+      console.log('🔄 SocketService: Disconnecting existing socket');
+      this.socket.disconnect();
+    }
+
+    // Remove /api from the URL since socket.io connects to the base server
+    const apiUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:4000';
+    const serverUrl = apiUrl.replace('/api', '');
+    console.log('🌐 SocketService: Connecting to:', serverUrl, '(API URL:', apiUrl, ')');
+
+    this.socket = io(serverUrl, {
       auth: {
         sessionId
       },
@@ -53,12 +70,15 @@ class SocketService {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      timeout: 10000,
+      forceNew: true
     });
 
     this.setupEventListeners();
   }
 
   disconnect(): void {
+    console.log('🔌 SocketService: Disconnecting...');
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -67,7 +87,9 @@ class SocketService {
   }
 
   isConnected(): boolean {
-    return this.socket?.connected ?? false;
+    const connected = this.socket?.connected ?? false;
+    console.log('🔍 SocketService: Connection status:', connected);
+    return connected;
   }
 
   private setupEventListeners(): void {
@@ -75,17 +97,36 @@ class SocketService {
 
     // Connection events
     this.socket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('✅ SocketService: Connected to server successfully');
       this.emit('connect');
+      
+      // Request online data immediately after connection
+      setTimeout(() => {
+        console.log('📊 SocketService: Requesting online users and agents');
+        this.getOnlineUsers();
+        this.getOnlineAgents();
+      }, 500);
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Disconnected from server');
+    this.socket.on('connect_error', (error) => {
+      console.error('❌ SocketService: Connection error:', error);
+      this.emit('connect_error', error);
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('🔌 SocketService: Disconnected from server. Reason:', reason);
       this.emit('disconnect');
+    });
+
+    // Authentication error handling
+    this.socket.on('error', (error) => {
+      console.error('❌ SocketService: Socket error:', error);
+      this.emit('error', error);
     });
 
     // Message events
     this.socket.on('new-message', (data) => {
+      console.log('💬 SocketService: New message received:', data);
       this.emit('new-message', data);
     });
 
@@ -94,15 +135,18 @@ class SocketService {
     });
 
     this.socket.on('chat-history', (data) => {
+      console.log('📚 SocketService: Chat history received for room:', data.chatRoomId);
       this.emit('chat-history', data);
     });
 
     // Room events
     this.socket.on('user-joined-room', (data) => {
+      console.log('👤 SocketService: User joined room:', data);
       this.emit('user-joined-room', data);
     });
 
     this.socket.on('user-left-room', (data) => {
+      console.log('👤 SocketService: User left room:', data);
       this.emit('user-left-room', data);
     });
 
@@ -113,21 +157,18 @@ class SocketService {
 
     // Status events
     this.socket.on('user-status-changed', (data) => {
+      console.log('📱 SocketService: User status changed:', data);
       this.emit('user-status-changed', data);
     });
 
     this.socket.on('online-users', (data) => {
+      console.log('👥 SocketService: Online users received:', data);
       this.emit('online-users', data);
     });
 
     this.socket.on('online-agents', (data) => {
+      console.log('👨‍💼 SocketService: Online agents received:', data);
       this.emit('online-agents', data);
-    });
-
-    // Error events
-    this.socket.on('error', (data) => {
-      console.error('Socket error:', data);
-      this.emit('error', data);
     });
   }
 
@@ -202,14 +243,80 @@ class SocketService {
     this.socket.emit('agent-status-update', { status });
   }
 
+  // Request online users
   getOnlineUsers(): void {
     if (!this.socket) return;
     this.socket.emit('get-online-users');
   }
 
+  // Request online agents
   getOnlineAgents(): void {
     if (!this.socket) return;
     this.socket.emit('get-online-agents');
+  }
+
+  // Test connection without authentication (for debugging)
+  testConnection(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+      const serverUrl = apiUrl.replace('/api', '');
+      
+      console.log('🧪 SocketService: Testing connection to:', serverUrl);
+      
+      const testSocket = io(serverUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 5000,
+        forceNew: true
+      });
+
+      const timeout = setTimeout(() => {
+        console.log('❌ SocketService: Connection test timeout');
+        testSocket.disconnect();
+        resolve(false);
+      }, 10000);
+
+      testSocket.on('connect', () => {
+        console.log('✅ SocketService: Connection test successful');
+        clearTimeout(timeout);
+        testSocket.disconnect();
+        resolve(true);
+      });
+
+      testSocket.on('connect_error', (error) => {
+        console.error('❌ SocketService: Connection test failed:', error);
+        clearTimeout(timeout);
+        testSocket.disconnect();
+        resolve(false);
+      });
+    });
+  }
+
+  // Get current connection status with details
+  getConnectionDetails(): object {
+    if (!this.socket) {
+      return { status: 'not_initialized', socket: null };
+    }
+
+    return {
+      status: this.socket.connected ? 'connected' : 'disconnected',
+      id: this.socket.id,
+      transport: this.socket.io.engine?.transport?.name,
+      readyState: this.socket.io.engine?.readyState,
+      auth: this.socket.auth
+    };
+  }
+
+  // Manually reconnect with current session
+  reconnect(): void {
+    if (this.currentSessionId) {
+      console.log('🔄 SocketService: Manual reconnection with sessionId:', this.currentSessionId);
+      this.disconnect();
+      setTimeout(() => {
+        this.connect(this.currentSessionId!);
+      }, 1000);
+    } else {
+      console.error('❌ SocketService: Cannot reconnect - no session ID available');
+    }
   }
 }
 

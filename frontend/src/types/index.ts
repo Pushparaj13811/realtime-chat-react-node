@@ -25,6 +25,8 @@ export interface User {
   isOnline: boolean;
   lastSeen: Date;
   socketId?: string;
+  department?: Department;
+  specialization?: string;
 }
 
 export interface AuthSession {
@@ -40,19 +42,19 @@ export interface AuthSession {
 
 // Message Types
 export const MessageType = {
-  TEXT: 'TEXT',
-  IMAGE: 'IMAGE',
-  FILE: 'FILE',
-  SYSTEM: 'SYSTEM'
+  TEXT: 'text',
+  IMAGE: 'image',
+  FILE: 'file',
+  SYSTEM: 'system'
 } as const;
 
 export type MessageType = typeof MessageType[keyof typeof MessageType];
 
 export const MessageStatus = {
-  SENT: 'SENT',
-  DELIVERED: 'DELIVERED',
-  READ: 'READ',
-  FAILED: 'FAILED'
+  SENT: 'sent',
+  DELIVERED: 'delivered',
+  READ: 'read',
+  FAILED: 'failed'
 } as const;
 
 export type MessageStatus = typeof MessageStatus[keyof typeof MessageStatus];
@@ -80,19 +82,19 @@ export interface Message {
 
 // Chat Room Types
 export const ChatRoomType = {
-  DIRECT: 'DIRECT',
-  GROUP: 'GROUP',
-  SUPPORT: 'SUPPORT'
+  DIRECT: 'direct',
+  SUPPORT: 'support',
+  GROUP: 'group'
+} as const;
+
+export const ChatRoomStatus = {
+  ACTIVE: 'active',
+  CLOSED: 'closed',
+  PENDING: 'pending',
+  TRANSFERRED: 'transferred'
 } as const;
 
 export type ChatRoomType = typeof ChatRoomType[keyof typeof ChatRoomType];
-
-export const ChatRoomStatus = {
-  ACTIVE: 'ACTIVE',
-  CLOSED: 'CLOSED',
-  ARCHIVED: 'ARCHIVED'
-} as const;
-
 export type ChatRoomStatus = typeof ChatRoomStatus[keyof typeof ChatRoomStatus];
 
 export interface ChatRoom {
@@ -109,6 +111,8 @@ export interface ChatRoom {
   metadata?: {
     subject?: string;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
+    department?: Department;
+    problemType?: ProblemType;
     tags?: string[];
     customerInfo?: {
       name?: string;
@@ -176,6 +180,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   role?: UserRole;
+  department?: Department;
+  specialization?: string;
 }
 
 export interface CreateChatRoomRequest {
@@ -185,6 +191,8 @@ export interface CreateChatRoomRequest {
   metadata?: {
     subject?: string;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
+    department?: Department;
+    problemType?: ProblemType;
     tags?: string[];
     customerInfo?: {
       name?: string;
@@ -223,4 +231,53 @@ export interface UIState {
   sidebarOpen: boolean;
   settingsOpen: boolean;
   currentView: 'chat' | 'settings' | 'profile';
-} 
+}
+
+// Department types
+export const Department = {
+  TECHNICAL_SUPPORT: 'technical_support',
+  BILLING: 'billing',
+  SALES: 'sales',
+  GENERAL_SUPPORT: 'general_support',
+  ACCOUNT_MANAGEMENT: 'account_management',
+  UNKNOWN: 'unknown',
+  OTHER: 'other'
+} as const;
+
+export type Department = typeof Department[keyof typeof Department];
+
+// Problem types
+export const ProblemType = {
+  // Technical Support
+  TECHNICAL_ISSUE: 'technical_issue',
+  BUG_REPORT: 'bug_report',
+  FEATURE_REQUEST: 'feature_request',
+  INSTALLATION_HELP: 'installation_help',
+  
+  // Billing
+  PAYMENT_ISSUE: 'payment_issue',
+  REFUND_REQUEST: 'refund_request',
+  BILLING_INQUIRY: 'billing_inquiry',
+  SUBSCRIPTION_CHANGE: 'subscription_change',
+  
+  // Sales
+  PRODUCT_INQUIRY: 'product_inquiry',
+  QUOTE_REQUEST: 'quote_request',
+  DEMO_REQUEST: 'demo_request',
+  PRICING_QUESTION: 'pricing_question',
+  
+  // General
+  GENERAL_QUESTION: 'general_question',
+  COMPLAINT: 'complaint',
+  FEEDBACK: 'feedback',
+  
+  // Account Management
+  ACCOUNT_ACCESS: 'account_access',
+  PROFILE_UPDATE: 'profile_update',
+  DATA_REQUEST: 'data_request',
+  
+  // Other
+  OTHER: 'other'
+} as const;
+
+export type ProblemType = typeof ProblemType[keyof typeof ProblemType]; 

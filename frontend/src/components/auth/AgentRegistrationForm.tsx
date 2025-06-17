@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,12 +17,24 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserRole } from '@/types';
+import { UserRole, Department } from '@/types';
+import apiService from '@/services/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AgentRegistrationFormProps {
   onBack?: () => void;
   adminSessionId?: string; // Required for verification
 }
+
+const departmentLabels: Record<Department, string> = {
+  [Department.TECHNICAL_SUPPORT]: 'Technical Support',
+  [Department.BILLING]: 'Billing & Payments',
+  [Department.SALES]: 'Sales & Pricing',
+  [Department.GENERAL_SUPPORT]: 'General Support',
+  [Department.ACCOUNT_MANAGEMENT]: 'Account Management',
+  [Department.UNKNOWN]: 'Not Sure',
+  [Department.OTHER]: 'Other'
+};
 
 export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrationFormProps) {
   const [formData, setFormData] = useState({
@@ -31,7 +43,8 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
     password: '',
     confirmPassword: '',
     role: UserRole.AGENT,
-    department: '',
+    department: '' as Department | '',
+    specialization: '',
     notes: ''
   });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -39,7 +52,7 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const { state, register, clearError } = useAuth();
+  const { state, clearError } = useAuth();
 
   // Validation rules
   const validateForm = (): boolean => {
@@ -100,9 +113,34 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { confirmPassword, ...registerData } = formData;
-      await register(registerData);
-      setIsSuccess(true);
+      const { confirmPassword, notes, ...registerData } = formData;
+      
+      // Convert empty string department to undefined
+      const finalData = {
+        ...registerData,
+        department: formData.department || undefined
+      };
+      
+      // Call register API but don't auto-login (this was causing admin logout)
+      const response = await apiService.register(finalData);
+      
+      if (response.success) {
+        setIsSuccess(true);
+        // Reset form for creating another agent
+        setFormData({
+          username: '',
+          email: '',
+          password: '',
+          confirmPassword: '',
+          role: UserRole.AGENT,
+          department: '' as Department | '',
+          specialization: '',
+          notes: ''
+        });
+      } else {
+        // Handle registration failure
+        console.error('Agent registration failed:', response.message);
+      }
     } catch (error) {
       console.error('Agent registration failed:', error);
     }
@@ -247,17 +285,42 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
               <label className="text-sm font-medium text-gray-700 mb-1 block">
                 Department *
               </label>
-              <Input
-                type="text"
+              <Select
                 value={formData.department}
-                onChange={(e) => handleInputChange('department', e.target.value)}
-                placeholder="e.g., Customer Support, Technical Support"
+                onValueChange={(value) => handleInputChange('department', value as Department)}
                 disabled={state.isLoading}
-                aria-invalid={!!validationErrors.department}
-              />
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(departmentLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {validationErrors.department && (
                 <p className="text-sm text-red-600 mt-1">{validationErrors.department}</p>
               )}
+            </div>
+
+            {/* Specialization Field */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Specialization (Optional)
+              </label>
+              <Input
+                type="text"
+                value={formData.specialization}
+                onChange={(e) => handleInputChange('specialization', e.target.value)}
+                placeholder="e.g., Network Issues, Payment Processing, Enterprise Sales"
+                disabled={state.isLoading}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Specific area of expertise within the department
+              </p>
             </div>
 
             {/* Password Field */}

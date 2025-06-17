@@ -16,7 +16,10 @@ type AuthAction =
   | { type: 'AUTH_ERROR'; payload: string }
   | { type: 'AUTH_LOGOUT' }
   | { type: 'UPDATE_USER_STATUS'; payload: UserStatus }
-  | { type: 'CLEAR_ERROR' };
+  | { type: 'CLEAR_ERROR' }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'LOGIN_SUCCESS'; payload: AuthSession }
+  | { type: 'LOGOUT' };
 
 const initialState: AuthState = {
   user: null,
@@ -67,6 +70,27 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         ...state,
         error: null,
       };
+    case 'SET_LOADING':
+      return {
+        ...state,
+        isLoading: action.payload,
+      };
+    case 'LOGIN_SUCCESS':
+      return {
+        ...state,
+        user: action.payload,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      };
+    case 'LOGOUT':
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+      };
     default:
       return state;
   }
@@ -90,16 +114,57 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // Initialize auth state on mount
+  // Initialize user on mount
   useEffect(() => {
+    const initializeAuth = async () => {
+      const sessionId = apiService.getSessionId();
+      console.log('🔍 Initializing auth with sessionId:', sessionId);
+      
+      if (sessionId) {
+        try {
+          dispatch({ type: 'SET_LOADING', payload: true });
+          const response = await apiService.validateSession();
+          console.log('✅ Session validation response:', response);
+          
+          if (response.success && response.data) {
+            dispatch({ 
+              type: 'LOGIN_SUCCESS', 
+              payload: response.data 
+            });
+          } else {
+            console.log('❌ Session validation failed, clearing session');
+            apiService.clearSession();
+            dispatch({ type: 'LOGOUT' });
+          }
+        } catch (error) {
+          console.error('❌ Session validation error:', error);
+          apiService.clearSession();
+          dispatch({ type: 'LOGOUT' });
+        } finally {
+          dispatch({ type: 'SET_LOADING', payload: false });
+        }
+      } else {
+        console.log('ℹ️ No session found, user not authenticated');
+        dispatch({ type: 'SET_LOADING', payload: false });
+      }
+    };
+
     initializeAuth();
   }, []);
 
   // Setup socket connection when authenticated
   useEffect(() => {
+    console.log('AuthContext: Socket connection effect triggered', {
+      isAuthenticated: state.isAuthenticated,
+      hasSessionId: !!state.user?.sessionId,
+      sessionId: state.user?.sessionId
+    });
+    
     if (state.isAuthenticated && state.user?.sessionId) {
+      console.log('AuthContext: Connecting socket with sessionId:', state.user.sessionId);
       socketService.connect(state.user.sessionId);
     } else {
+      console.log('AuthContext: Disconnecting socket - not authenticated or no sessionId');
       socketService.disconnect();
     }
 
@@ -108,45 +173,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [state.isAuthenticated, state.user?.sessionId]);
 
-  const initializeAuth = async () => {
-    const sessionId = apiService.getSessionId();
-    
-    if (!sessionId) {
-      dispatch({ type: 'AUTH_ERROR', payload: 'No session found' });
-      return;
-    }
-
-    try {
-      dispatch({ type: 'AUTH_START' });
-      const response = await apiService.validateSession();
-      
-      if (response.success && response.data) {
-        dispatch({ type: 'AUTH_SUCCESS', payload: response.data });
-      } else {
-        dispatch({ type: 'AUTH_ERROR', payload: response.message });
-      }
-    } catch (error) {
-      console.error('Auth initialization error:', error);
-      dispatch({ type: 'AUTH_ERROR', payload: 'Failed to validate session' });
-    }
-  };
-
   const login = async (credentials: LoginRequest) => {
     try {
       dispatch({ type: 'AUTH_START' });
+      console.log('🔐 Attempting login for:', credentials.email);
+      
       const response = await apiService.login(credentials);
+      console.log('📊 Login response:', response);
       
       if (response.success && response.data) {
+        console.log('✅ Login successful, sessionId:', response.data.sessionId);
         dispatch({ type: 'AUTH_SUCCESS', payload: response.data });
+        
+        // Connect to socket with the new session
+        if (response.data.sessionId) {
+          socketService.connect(response.data.sessionId);
+        }
       } else {
-        dispatch({ type: 'AUTH_ERROR', payload: response.message });
+        console.error('❌ Login failed:', response.message);
+        dispatch({ type: 'AUTH_ERROR', payload: response.message || 'Login failed' });
       }
     } catch (error) {
-      console.error('Login error:', error);
-      dispatch({ 
-        type: 'AUTH_ERROR', 
-        payload: error instanceof Error ? error.message : 'Login failed' 
-      });
+      console.error('❌ Login error:', error);
+      let errorMessage = 'Login failed';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      dispatch({ type: 'AUTH_ERROR', payload: errorMessage });
     }
   };
 

@@ -7,7 +7,8 @@ import type {
   ChatRoom,
   Message,
   CreateChatRoomRequest,
-  User
+  User,
+  UserStatus
 } from '../types';
 
 class ApiService {
@@ -171,6 +172,32 @@ class ApiService {
   // Health check
   async healthCheck(): Promise<ApiResponse> {
     const response: AxiosResponse<ApiResponse> = await this.api.get('/health');
+    return response.data;
+  }
+
+  // Admin endpoints
+  async getAdminStats(): Promise<ApiResponse<{
+    totalUsers: number;
+    activeAgents: number;
+    activeChats: number;
+    onlineUsers: number;
+  }>> {
+    const response: AxiosResponse<ApiResponse<{
+      totalUsers: number;
+      activeAgents: number;
+      activeChats: number;
+      onlineUsers: number;
+    }>> = await this.api.get('/admin/stats');
+    return response.data;
+  }
+
+  async getAllUsers(): Promise<ApiResponse<User[]>> {
+    const response: AxiosResponse<ApiResponse<User[]>> = await this.api.get('/admin/users');
+    return response.data;
+  }
+
+  async updateUserStatus(userId: string, status: UserStatus): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.put(`/admin/users/${userId}/status`, { status });
     return response.data;
   }
 }
