@@ -15,6 +15,7 @@ import type {
 } from '../interfaces/services.interfaces.js';
 import { config } from '../config/config.js';
 import { User } from '../models/User.js';
+import { ChatRoom } from '../models/ChatRoom.js';
 import { UserRole } from '../types/index.js';
 
 export class SocketService implements ISocketService {
@@ -319,6 +320,14 @@ export class SocketService implements ISocketService {
         content: data.content,
         messageType: data.messageType
       });
+
+      // Check messaging permissions for support chat rooms
+      const isMessageAllowed = await this.checkMessagingPermissions(user, data.chatRoomId);
+      if (!isMessageAllowed) {
+        console.log(`❌ SocketService: User ${user.username} not allowed to send first message in support room ${data.chatRoomId}`);
+        socket.emit('error', { message: 'Only assigned agents can initiate conversation in support chat rooms' });
+        return;
+      }
       
       // Create message in database
       const message = await this.messageService.createMessage({
@@ -603,6 +612,49 @@ export class SocketService implements ISocketService {
     } catch (error) {
       console.error('Error getting room users:', error);
       return [];
+    }
+  }
+
+  // Check if user can send messages in a chat room (for support chat restrictions)
+  private async checkMessagingPermissions(user: AuthSession, chatRoomId: string): Promise<boolean> {
+    try {
+      // Get the chat room
+      const chatRoom = await ChatRoom.findById(chatRoomId).populate('assignedAgent');
+
+      if (!chatRoom) {
+        return false;
+      }
+
+      // For non-support rooms, allow all participants to message
+      if (chatRoom.type !== 'support') {
+        return true;
+      }
+
+      // For support rooms, check if there are any existing messages
+      // Import Message model for direct query
+      const { Message } = await import('../models/Message.js');
+      const messageCount = await Message.countDocuments({ chatRoomId });
+      
+      console.log(`🔍 SocketService: Checking messaging permissions for support room ${chatRoomId}:`, {
+        messageCount,
+        userRole: user.role,
+        userId: user.userId,
+        assignedAgentId: this.extractId(chatRoom.assignedAgent)
+      });
+
+      // If there are already messages in the room, anyone can participate
+      if (messageCount > 0) {
+        return true;
+      }
+
+      // For empty support rooms (first message), only the assigned agent can initiate
+      const isAssignedAgent = this.extractId(chatRoom.assignedAgent) === user.userId;
+      const isAdmin = user.role === 'admin';
+
+      return isAssignedAgent || isAdmin;
+    } catch (error) {
+      console.error('Check messaging permissions error:', error);
+      return false;
     }
   }
 

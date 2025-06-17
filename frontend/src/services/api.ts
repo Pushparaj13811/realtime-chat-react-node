@@ -11,6 +11,23 @@ import type {
   UserStatus
 } from '../types';
 
+interface SupportTicket {
+  _id: string;
+  ticketNumber: string;
+  title: string;
+  description: string;
+  department: string;
+  problemType: string;
+  priority: string;
+  status: string;
+  createdBy: string;
+  assignedAgent?: string;
+  assignedBy?: string;
+  chatRoom?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 class ApiService {
   private api: AxiosInstance;
   private sessionId: string | null = null;
@@ -198,6 +215,72 @@ class ApiService {
 
   async updateUserStatus(userId: string, status: UserStatus): Promise<ApiResponse> {
     const response: AxiosResponse<ApiResponse> = await this.api.put(`/admin/users/${userId}/status`, { status });
+    return response.data;
+  }
+
+  // Support Ticket endpoints
+  async createSupportTicket(ticketData: {
+    title: string;
+    description: string;
+    department: string;
+    problemType: string;
+    priority?: string;
+  }): Promise<ApiResponse<SupportTicket>> {
+    const response: AxiosResponse<ApiResponse<SupportTicket>> = await this.api.post('/support-tickets/create', ticketData);
+    return response.data;
+  }
+
+  async getMyTickets(): Promise<ApiResponse<SupportTicket[]>> {
+    const response: AxiosResponse<ApiResponse<SupportTicket[]>> = await this.api.get('/support-tickets/my-tickets');
+    return response.data;
+  }
+
+  async getTicket(ticketId: string): Promise<ApiResponse<SupportTicket>> {
+    const response: AxiosResponse<ApiResponse<SupportTicket>> = await this.api.get(`/support-tickets/${ticketId}`);
+    return response.data;
+  }
+
+  async getAgentTickets(): Promise<ApiResponse<SupportTicket[]>> {
+    const response: AxiosResponse<ApiResponse<SupportTicket[]>> = await this.api.get('/support-tickets/agent/assigned');
+    return response.data;
+  }
+
+  async getAdminTickets(filters?: {
+    status?: string;
+    department?: string;
+    priority?: string;
+    assignedAgent?: string;
+  }): Promise<ApiResponse<SupportTicket[]>> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.department) params.append('department', filters.department);
+    if (filters?.priority) params.append('priority', filters.priority);
+    if (filters?.assignedAgent) params.append('assignedAgent', filters.assignedAgent);
+    
+    const queryString = params.toString();
+    const url = queryString ? `/support-tickets/admin/all?${queryString}` : '/support-tickets/admin/all';
+    
+    const response: AxiosResponse<ApiResponse<SupportTicket[]>> = await this.api.get(url);
+    return response.data;
+  }
+
+  async assignTicket(ticketId: string, agentId: string): Promise<ApiResponse<{ ticket: SupportTicket; chatRoom: ChatRoom }>> {
+    const response: AxiosResponse<ApiResponse<{ ticket: SupportTicket; chatRoom: ChatRoom }>> = await this.api.post('/support-tickets/assign', {
+      ticketId,
+      agentId
+    });
+    return response.data;
+  }
+
+  async updateTicketStatus(ticketId: string, status: string): Promise<ApiResponse<SupportTicket>> {
+    const response: AxiosResponse<ApiResponse<SupportTicket>> = await this.api.patch(`/support-tickets/${ticketId}/status`, {
+      status
+    });
+    return response.data;
+  }
+
+  async getTicketStats(): Promise<ApiResponse<Record<string, unknown>>> {
+    const response: AxiosResponse<ApiResponse<Record<string, unknown>>> = await this.api.get('/support-tickets/admin/stats');
     return response.data;
   }
 }
