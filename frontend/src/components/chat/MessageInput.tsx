@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Send, Paperclip } from 'lucide-react';
+import { Send} from 'lucide-react';
 import { useTyping } from '@/hooks/useTyping';
 import { cn } from '@/lib/utils';
 
@@ -85,15 +85,6 @@ export function MessageInput({
 
   return (
     <div className={cn("flex gap-2 p-4 border-t bg-white", className)}>
-      <Button
-        variant="outline"
-        size="icon"
-        className="flex-shrink-0"
-        disabled={disabled}
-        aria-label="Attach file"
-      >
-        <Paperclip className="h-4 w-4" />
-      </Button>
       
       <div className="flex-1 relative">
         <Textarea
