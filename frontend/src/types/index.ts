@@ -16,6 +16,19 @@ export const UserStatus = {
 
 export type UserStatus = typeof UserStatus[keyof typeof UserStatus];
 
+// Department Types
+export const Department = {
+  TECHNICAL_SUPPORT: 'technical_support',
+  BILLING: 'billing',
+  SALES: 'sales',
+  GENERAL_SUPPORT: 'general_support',
+  ACCOUNT_MANAGEMENT: 'account_management',
+  UNKNOWN: 'unknown',
+  OTHER: 'other'
+} as const;
+
+export type Department = typeof Department[keyof typeof Department];
+
 export interface User {
   _id: string;
   username: string;
@@ -25,8 +38,8 @@ export interface User {
   isOnline: boolean;
   lastSeen: Date;
   socketId?: string;
-  department?: Department;
   specialization?: string;
+  department?: Department;
 }
 
 export interface AuthSession {
@@ -108,18 +121,16 @@ export interface ChatRoom {
   lastMessage?: Message;
   lastActivity: Date;
   isActive: boolean;
-  metadata?: {
-    subject?: string;
-    priority?: 'low' | 'medium' | 'high' | 'urgent';
-    department?: Department;
-    problemType?: ProblemType;
-    tags?: string[];
-    customerInfo?: {
-      name?: string;
-      email?: string;
-      phone?: string;
+      metadata?: {
+      tags?: string[];
+      subject?: string;
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      customerInfo?: {
+        name?: string;
+        email?: string;
+        phone?: string;
+      };
     };
-  };
   transferHistory?: Array<{
     fromAgent?: string;
     toAgent?: string;
@@ -189,11 +200,9 @@ export interface CreateChatRoomRequest {
   type: ChatRoomType;
   participants?: string[];
   metadata?: {
+    tags?: string[];
     subject?: string;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
-    department?: Department;
-    problemType?: ProblemType;
-    tags?: string[];
     customerInfo?: {
       name?: string;
       email?: string;
@@ -232,52 +241,3 @@ export interface UIState {
   settingsOpen: boolean;
   currentView: 'chat' | 'settings' | 'profile';
 }
-
-// Department types
-export const Department = {
-  TECHNICAL_SUPPORT: 'technical_support',
-  BILLING: 'billing',
-  SALES: 'sales',
-  GENERAL_SUPPORT: 'general_support',
-  ACCOUNT_MANAGEMENT: 'account_management',
-  UNKNOWN: 'unknown',
-  OTHER: 'other'
-} as const;
-
-export type Department = typeof Department[keyof typeof Department];
-
-// Problem types
-export const ProblemType = {
-  // Technical Support
-  TECHNICAL_ISSUE: 'technical_issue',
-  BUG_REPORT: 'bug_report',
-  FEATURE_REQUEST: 'feature_request',
-  INSTALLATION_HELP: 'installation_help',
-  
-  // Billing
-  PAYMENT_ISSUE: 'payment_issue',
-  REFUND_REQUEST: 'refund_request',
-  BILLING_INQUIRY: 'billing_inquiry',
-  SUBSCRIPTION_CHANGE: 'subscription_change',
-  
-  // Sales
-  PRODUCT_INQUIRY: 'product_inquiry',
-  QUOTE_REQUEST: 'quote_request',
-  DEMO_REQUEST: 'demo_request',
-  PRICING_QUESTION: 'pricing_question',
-  
-  // General
-  GENERAL_QUESTION: 'general_question',
-  COMPLAINT: 'complaint',
-  FEEDBACK: 'feedback',
-  
-  // Account Management
-  ACCOUNT_ACCESS: 'account_access',
-  PROFILE_UPDATE: 'profile_update',
-  DATA_REQUEST: 'data_request',
-  
-  // Other
-  OTHER: 'other'
-} as const;
-
-export type ProblemType = typeof ProblemType[keyof typeof ProblemType]; 

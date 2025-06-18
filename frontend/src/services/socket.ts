@@ -7,7 +7,8 @@ import type {
   UserTyping,
   SocketUser,
   UserStatus,
-  User
+  User,
+  ChatRoom
 } from '../types';
 
 interface SocketEvents {
@@ -32,6 +33,15 @@ interface SocketEvents {
   'user-status-changed': (data: { userId: string; status: UserStatus; timestamp: Date }) => void;
   'online-users': (users: SocketUser[]) => void;
   'online-agents': (agents: User[]) => void;
+  
+  // Agent assignment events
+  'agent-removed': (data: { chatRoomId: string; removedAgentId: string; newAgent: User | null; reason: string; timestamp: Date }) => void;
+  'agent-assignment-removed': (data: { chatRoomId: string; reason: string }) => void;
+  'agent-assignment-received': (data: { chatRoom: object; reason: string }) => void;
+  'chat-room-updated': (data: { chatRoom: ChatRoom; action: string; reason?: string }) => void;
+  
+  // Chat activity events
+  'set-active-chat': (data: { chatRoomId: string | null }) => void;
   
   // Error events
   error: (data: { message: string }) => void;
@@ -152,6 +162,7 @@ class SocketService {
 
     // Typing events
     this.socket.on('user-typing', (data) => {
+      console.log('⌨️ SocketService: User typing event received:', data);
       this.emit('user-typing', data);
     });
 
@@ -169,6 +180,28 @@ class SocketService {
     this.socket.on('online-agents', (data) => {
       console.log('👨‍💼 SocketService: Online agents received:', data);
       this.emit('online-agents', data);
+    });
+
+    // Agent assignment events
+    this.socket.on('agent-removed', (data) => {
+      console.log('🚨 SocketService: Agent removed from chat room:', data);
+      this.emit('agent-removed', data);
+    });
+
+    this.socket.on('agent-assignment-removed', (data) => {
+      console.log('🚨 SocketService: Agent assignment removed event received:', data);
+      console.log('🔍 SocketService: Current event listeners for agent-assignment-removed:', this.eventListeners.get('agent-assignment-removed')?.length || 0);
+      this.emit('agent-assignment-removed', data);
+    });
+
+    this.socket.on('agent-assignment-received', (data) => {
+      console.log('✅ SocketService: Agent assignment received:', data);
+      this.emit('agent-assignment-received', data);
+    });
+
+    this.socket.on('chat-room-updated', (data) => {
+      console.log('🔄 SocketService: Chat room updated:', data);
+      this.emit('chat-room-updated', data);
     });
   }
 
@@ -222,18 +255,28 @@ class SocketService {
 
   markMessageDelivered(messageId: string): void {
     if (!this.socket) return;
+    console.log('📦 SocketService: Marking message as delivered:', messageId);
     this.socket.emit('message-delivered', { messageId });
   }
 
   markMessageRead(messageId: string): void {
     if (!this.socket) return;
+    console.log('👁️ SocketService: Marking message as read:', messageId);
     this.socket.emit('message-read', { messageId });
+  }
+
+  // Notify that user is viewing a specific chat room
+  setActiveChatRoom(chatRoomId: string | null): void {
+    if (!this.socket) return;
+    console.log('🎯 SocketService: Setting active chat room:', chatRoomId);
+    this.socket.emit('set-active-chat', { chatRoomId });
   }
 
   // Typing methods
   sendTyping(chatRoomId: string, isTyping: boolean): void {
     if (!this.socket) return;
     const data: TypingData = { chatRoomId, isTyping };
+    console.log('⌨️ SocketService: Sending typing event:', data);
     this.socket.emit('typing', data);
   }
 

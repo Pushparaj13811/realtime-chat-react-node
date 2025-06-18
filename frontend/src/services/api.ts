@@ -8,24 +8,71 @@ import type {
   Message,
   CreateChatRoomRequest,
   User,
-  UserStatus
+  UserStatus,
+  ExportOptions
 } from '../types';
 
-interface SupportTicket {
+interface AgentWorkload {
   _id: string;
-  ticketNumber: string;
-  title: string;
-  description: string;
-  department: string;
-  problemType: string;
-  priority: string;
+  username: string;
+  email: string;
+  specialization?: string;
+  isOnline: boolean;
   status: string;
-  createdBy: string;
-  assignedAgent?: string;
-  assignedBy?: string;
-  chatRoom?: string;
-  createdAt: string;
-  updatedAt: string;
+  activeChatsCount: number;
+  workloadPercentage: number;
+  assignedChats: Array<{
+    _id: string;
+    type: string;
+    status: string;
+    lastActivity: string;
+    metadata?: {
+      subject?: string;
+      priority?: string;
+    };
+  }>;
+}
+
+// Helper function to extract error message from axios error
+function extractErrorMessage(error: unknown): string {
+  // If it's an axios error with response
+  if (error && typeof error === 'object' && 'response' in error) {
+    const axiosError = error as { response?: { data?: { message?: string; error?: string; errors?: string[] } | string } };
+    const data = axiosError.response?.data;
+    
+    if (data) {
+      // If response has a message but wrapped differently
+      if (typeof data === 'string') return data;
+      
+      // Try different possible error message fields for object data
+      if (typeof data === 'object') {
+        const errorData = data as { message?: string; error?: string; errors?: string[] };
+        if (errorData.message) return errorData.message;
+        if (errorData.error) return errorData.error;
+        if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+          return errorData.errors[0];
+        }
+      }
+    }
+  }
+  
+  // If it's a network error
+  if (error && typeof error === 'object' && 'message' in error) {
+    const errorWithMessage = error as { message: string; code?: string };
+    if (errorWithMessage.code === 'NETWORK_ERROR' || errorWithMessage.message.includes('Network Error')) {
+      return 'Network connection failed. Please check your internet connection.';
+    }
+    if (errorWithMessage.code === 'ECONNABORTED' || errorWithMessage.message.includes('timeout')) {
+      return 'Request timed out. Please try again.';
+    }
+    return errorWithMessage.message;
+  }
+  
+  // If it's a string error
+  if (typeof error === 'string') return error;
+  
+  // Default fallback
+  return 'An unexpected error occurred. Please try again.';
 }
 
 class ApiService {
@@ -34,7 +81,7 @@ class ApiService {
 
   constructor() {
     this.api = axios.create({
-      baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+      baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
       timeout: 10000,
       withCredentials: true,
     });
@@ -54,13 +101,34 @@ class ApiService {
     this.api.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
+        // Don't auto-redirect on 401 for login/register endpoints
+        const isAuthEndpoint = error.config?.url?.includes('/auth/');
+        
+        if (error.response?.status === 401 && !isAuthEndpoint) {
           this.clearSession();
           window.location.href = '/login';
         }
-        return Promise.reject(error);
+        
+        // Enhance error with proper message extraction
+        const enhancedError = {
+          ...error,
+          message: extractErrorMessage(error)
+        };
+        
+        return Promise.reject(enhancedError);
       }
     );
+  }
+
+  // Helper method to handle API calls with consistent error handling
+  private async handleApiCall<T>(apiCall: () => Promise<AxiosResponse<T>>): Promise<T> {
+    try {
+      const response = await apiCall();
+      return response.data;
+    } catch (error) {
+      // Re-throw with enhanced error message
+      throw new Error(extractErrorMessage(error));
+    }
   }
 
   // Session management
@@ -120,7 +188,7 @@ class ApiService {
   }
 
   async getOnlineAgents(): Promise<ApiResponse<User[]>> {
-    const response: AxiosResponse<ApiResponse<User[]>> = await this.api.get('/auth/agents/online');
+    const response: AxiosResponse<ApiResponse<User[]>> = await this.api.get('/chat/online-agents');
     return response.data;
   }
 
@@ -135,8 +203,15 @@ class ApiService {
     return response.data;
   }
 
-  async getAgentChatRooms(): Promise<ApiResponse<ChatRoom[]>> {
-    const response: AxiosResponse<ApiResponse<ChatRoom[]>> = await this.api.get('/chat/rooms/agent');
+  // Admin: Get all chat rooms (not limited to user participation)
+  async getAllChatRoomsAdmin(): Promise<ApiResponse<ChatRoom[]>> {
+    const response: AxiosResponse<ApiResponse<ChatRoom[]>> = await this.api.get('/admin/chat-rooms');
+    return response.data;
+  }
+
+  async getAgentChatRooms(status?: string): Promise<ApiResponse<ChatRoom[]>> {
+    const params = status ? { status } : {};
+    const response: AxiosResponse<ApiResponse<ChatRoom[]>> = await this.api.get('/chat/rooms/agent', { params });
     return response.data;
   }
 
@@ -152,10 +227,21 @@ class ApiService {
     return response.data;
   }
 
-  async searchMessages(chatRoomId: string, query: string): Promise<ApiResponse<Message[]>> {
-    const response: AxiosResponse<ApiResponse<Message[]>> = await this.api.get(
-      `/chat/rooms/${chatRoomId}/search?q=${encodeURIComponent(query)}`
-    );
+  async searchMessages(chatRoomId: string, query: string, options?: {
+    messageType?: string;
+    dateRange?: { start: Date; end: Date };
+    limit?: number;
+  }): Promise<ApiResponse<Message[]>> {
+    const params = {
+      query,
+      ...options,
+      ...(options?.dateRange && {
+        startDate: options.dateRange.start.toISOString(),
+        endDate: options.dateRange.end.toISOString()
+      })
+    };
+    
+    const response: AxiosResponse<ApiResponse<Message[]>> = await this.api.get(`/chat/rooms/${chatRoomId}/search`, { params });
     return response.data;
   }
 
@@ -172,17 +258,18 @@ class ApiService {
     return response.data;
   }
 
-  async transferChat(chatRoomId: string, toAgentId: string, reason?: string): Promise<ApiResponse> {
+  async transferChat(chatRoomId: string, fromAgentId: string, toAgentId: string, reason?: string): Promise<ApiResponse> {
     const response: AxiosResponse<ApiResponse> = await this.api.post('/chat/transfer', {
       chatRoomId,
+      fromAgentId,
       toAgentId,
       reason
     });
     return response.data;
   }
 
-  async getUnreadCount(): Promise<ApiResponse<{ count: number }>> {
-    const response: AxiosResponse<ApiResponse<{ count: number }>> = await this.api.get('/chat/unread-count');
+  async getUnreadCount(): Promise<ApiResponse<{ [chatRoomId: string]: number }>> {
+    const response: AxiosResponse<ApiResponse<{ [chatRoomId: string]: number }>> = await this.api.get('/chat/unread-count');
     return response.data;
   }
 
@@ -218,69 +305,104 @@ class ApiService {
     return response.data;
   }
 
-  // Support Ticket endpoints
-  async createSupportTicket(ticketData: {
-    title: string;
-    description: string;
-    department: string;
-    problemType: string;
-    priority?: string;
-  }): Promise<ApiResponse<SupportTicket>> {
-    const response: AxiosResponse<ApiResponse<SupportTicket>> = await this.api.post('/support-tickets/create', ticketData);
+  // Chat export endpoint
+  async exportChatData(options: ExportOptions): Promise<ApiResponse<{ url: string }>> {
+    const response: AxiosResponse<ApiResponse<{ url: string }>> = await this.api.post('/chat/export', options);
     return response.data;
   }
 
-  async getMyTickets(): Promise<ApiResponse<SupportTicket[]>> {
-    const response: AxiosResponse<ApiResponse<SupportTicket[]>> = await this.api.get('/support-tickets/my-tickets');
+  // Agent workload and management endpoints
+  async getAgentWorkloadStats(): Promise<ApiResponse<{
+    totalChats: number;
+    activeChats: number;
+    avgResponseTime: number;
+    completedToday: number;
+  }>> {
+    const response: AxiosResponse<ApiResponse<{
+      totalChats: number;
+      activeChats: number;
+      avgResponseTime: number;
+      completedToday: number;
+    }>> = await this.api.get('/chat/admin/agent-workload-stats');
     return response.data;
   }
 
-  async getTicket(ticketId: string): Promise<ApiResponse<SupportTicket>> {
-    const response: AxiosResponse<ApiResponse<SupportTicket>> = await this.api.get(`/support-tickets/${ticketId}`);
-    return response.data;
-  }
-
-  async getAgentTickets(): Promise<ApiResponse<SupportTicket[]>> {
-    const response: AxiosResponse<ApiResponse<SupportTicket[]>> = await this.api.get('/support-tickets/agent/assigned');
-    return response.data;
-  }
-
-  async getAdminTickets(filters?: {
-    status?: string;
-    department?: string;
-    priority?: string;
-    assignedAgent?: string;
-  }): Promise<ApiResponse<SupportTicket[]>> {
-    const params = new URLSearchParams();
-    if (filters?.status) params.append('status', filters.status);
-    if (filters?.department) params.append('department', filters.department);
-    if (filters?.priority) params.append('priority', filters.priority);
-    if (filters?.assignedAgent) params.append('assignedAgent', filters.assignedAgent);
-    
-    const queryString = params.toString();
-    const url = queryString ? `/support-tickets/admin/all?${queryString}` : '/support-tickets/admin/all';
-    
-    const response: AxiosResponse<ApiResponse<SupportTicket[]>> = await this.api.get(url);
-    return response.data;
-  }
-
-  async assignTicket(ticketId: string, agentId: string): Promise<ApiResponse<{ ticket: SupportTicket; chatRoom: ChatRoom }>> {
-    const response: AxiosResponse<ApiResponse<{ ticket: SupportTicket; chatRoom: ChatRoom }>> = await this.api.post('/support-tickets/assign', {
-      ticketId,
-      agentId
+  async transferAgentBetweenChats(fromChatRoomId: string, toChatRoomId: string, agentId: string): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.post('/admin/transfer-agent-between-chats', {
+      fromChatId: fromChatRoomId,
+      toChatId: toChatRoomId,
+      agentId,
+      reason: 'Admin transfer between chats'
     });
     return response.data;
   }
 
-  async updateTicketStatus(ticketId: string, status: string): Promise<ApiResponse<SupportTicket>> {
-    const response: AxiosResponse<ApiResponse<SupportTicket>> = await this.api.patch(`/support-tickets/${ticketId}/status`, {
-      status
+  async removeAgentFromChat(chatRoomId: string): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.post('/admin/remove-agent', {
+      chatRoomId,
+      reason: 'Admin removal'
     });
     return response.data;
   }
 
-  async getTicketStats(): Promise<ApiResponse<Record<string, unknown>>> {
-    const response: AxiosResponse<ApiResponse<Record<string, unknown>>> = await this.api.get('/support-tickets/admin/stats');
+  async assignAgentToChat(chatRoomId: string, agentId: string): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.post('/admin/assign-agent', {
+      chatRoomId,
+      agentId,
+      reason: 'Admin assignment'
+    });
+    return response.data;
+  }
+
+  // Chat room statistics
+  async getChatRoomStats(): Promise<ApiResponse<{
+    totalRooms: number;
+    activeRooms: number;
+    avgMessagesPerRoom: number;
+    totalMessages: number;
+    roomsByType: Record<string, number>;
+    roomsByStatus: Record<string, number>;
+  }>> {
+    const response: AxiosResponse<ApiResponse<{
+      totalRooms: number;
+      activeRooms: number;
+      avgMessagesPerRoom: number;
+      totalMessages: number;
+      roomsByType: Record<string, number>;
+      roomsByStatus: Record<string, number>;
+    }>> = await this.api.get('/admin/chat-stats');
+    return response.data;
+  }
+
+  // Admin Agent Management endpoints
+  async getAgentWorkloads(): Promise<ApiResponse<AgentWorkload[]>> {
+    const response: AxiosResponse<ApiResponse<AgentWorkload[]>> = await this.api.get('/admin/agent-workloads');
+    return response.data;
+  }
+
+  async transferAgent(chatRoomId: string, newAgentId: string, reason?: string): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.post('/admin/transfer-agent', {
+      chatRoomId,
+      agentId: newAgentId,
+      reason: reason || 'Admin transfer'
+    });
+    return response.data;
+  }
+
+  async assignAgentToRoom(chatRoomId: string, agentId: string, reason?: string): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.post('/admin/assign-agent', {
+      chatRoomId,
+      agentId,
+      reason: reason || 'Admin assignment'
+    });
+    return response.data;
+  }
+
+  async removeAgentFromRoom(chatRoomId: string, reason?: string): Promise<ApiResponse> {
+    const response: AxiosResponse<ApiResponse> = await this.api.post('/admin/remove-agent', {
+      chatRoomId,
+      reason: reason || 'Admin removal'
+    });
     return response.data;
   }
 }
