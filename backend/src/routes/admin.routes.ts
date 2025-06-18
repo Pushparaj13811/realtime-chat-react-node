@@ -15,7 +15,7 @@ const authController = new AuthController();
 router.use(AuthMiddleware.authenticate);
 router.use(AuthMiddleware.requireRole(UserRole.ADMIN));
 
-router.get('/stats', asyncHandler(authController.getAdminStats));   
+router.get('/stats', asyncHandler(authController.getAdminStats));
 router.get('/chat-stats', asyncHandler(chatController.getChatRoomStats));
 router.get('/chat-rooms', asyncHandler(chatController.getAllChatRoomsAdmin));
 router.get('/users', asyncHandler(authController.getAllUsers));

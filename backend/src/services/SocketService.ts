@@ -52,6 +52,9 @@ export class SocketService implements ISocketService {
       transports: ['websocket', 'polling']
     });
 
+    // Set Socket.IO instance for other services that need to emit events
+    this.chatRoomService.setSocketIO(this.io);
+
     // Authentication middleware
     this.io.use(async (socket, next) => {
       try {

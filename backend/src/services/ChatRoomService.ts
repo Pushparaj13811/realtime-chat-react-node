@@ -67,16 +67,26 @@ export class ChatRoomService {
     if (this.io) {
       // Use the same method as SocketService for consistency
       try {
+        console.log(`📡 ChatRoomService: Looking up socket for user ${userId} to emit ${event}`);
         const socketId = await this.cacheService.getUserSocketId(userId);
+        console.log(`📡 ChatRoomService: Found socket ID ${socketId} for user ${userId}`);
+        
         if (socketId) {
           this.io.to(socketId).emit(event, data);
-          console.log(`📡 Emitting ${event} to user ${userId} via socket ${socketId}`);
+          console.log(`✅ ChatRoomService: Successfully emitted ${event} to user ${userId} via socket ${socketId}`, data);
         } else {
-          console.warn(`⚠️ No socket found for user ${userId}, cannot emit ${event}`);
+          console.warn(`⚠️ ChatRoomService: No socket found for user ${userId}, cannot emit ${event}. Checking if user is online...`);
+          
+          // Additional debugging - check if user is in online users list
+          const onlineUsers = await this.cacheService.getOnlineUsers();
+          console.log(`🔍 ChatRoomService: Online users:`, onlineUsers);
+          console.log(`🔍 ChatRoomService: User ${userId} is ${onlineUsers.includes(userId) ? 'ONLINE' : 'OFFLINE'}`);
         }
       } catch (error) {
-        console.error('Error emitting to user:', error);
+        console.error('ChatRoomService: Error emitting to user:', error);
       }
+    } else {
+      console.error('ChatRoomService: Socket.IO instance not available');
     }
   }
 
@@ -351,10 +361,26 @@ export class ChatRoomService {
       });
     }
 
-    // Update cache
-    const updatedRoom = await ChatRoom.findById(chatRoomId);
+    // Update cache and get updated room for broadcasting
+    const updatedRoom = await ChatRoom.findById(chatRoomId)
+      .populate([
+        { path: 'participants', select: 'username email role status isOnline' },
+        { path: 'assignedAgent', select: 'username email role status isOnline' },
+        { path: 'createdBy', select: 'username email role' }
+      ]);
+    
     if (updatedRoom) {
       await this.cacheService.cacheChatRoom(updatedRoom);
+      
+      // Broadcast room update to all users for real-time UI updates
+      if (this.io) {
+        this.io.emit('chat-room-updated', {
+          chatRoom: updatedRoom,
+          action: 'agent-assigned',
+          reason: reason || 'Agent assignment'
+        });
+        console.log(`📡 ChatRoomService: Broadcasted chat-room-updated event for agent assignment to room ${chatRoomId}`);
+      }
     }
 
     return true;
@@ -600,10 +626,21 @@ export class ChatRoomService {
         this.emitToChatRoom(chatRoomId, 'agent-removed', notificationData);
 
         // Notify the removed agent
+        console.log(`📡 Attempting to notify removed agent ${previousAgentId} about removal from chat ${chatRoomId}`);
         await this.emitToUser(previousAgentId, 'agent-assignment-removed', {
           chatRoomId,
           reason: reason || 'Admin removal'
         });
+
+        // Broadcast room update to all users for real-time UI updates
+        if (this.io) {
+          this.io.emit('chat-room-updated', {
+            chatRoom: updatedRoom,
+            action: 'agent-removed',
+            reason: reason || 'Admin removal'
+          });
+          console.log(`📡 ChatRoomService: Broadcasted chat-room-updated event for room ${chatRoomId}`);
+        }
 
         // No notification to new agent since no auto-assignment
       }

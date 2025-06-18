@@ -32,142 +32,142 @@ export class AuthService {
     department?: Department;
     specialization?: string;
   }): Promise<RegisterResult> {
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [
-        { email: userData.email.toLowerCase() },
-        { username: userData.username }
-      ]
-    });
+      // Check if user already exists
+      const existingUser = await User.findOne({
+        $or: [
+          { email: userData.email.toLowerCase() },
+          { username: userData.username }
+        ]
+      });
 
-    if (existingUser) {
+      if (existingUser) {
+        return {
+          success: false,
+          message: 'User with this email or username already exists'
+        };
+      }
+
+      // Hash password
+      const saltRounds = 12;
+      const hashedPassword = await bcrypt.hash(userData.password, saltRounds);
+
+      // Create new user
+      const newUser = new User({
+        username: userData.username,
+        email: userData.email,
+        password: hashedPassword,
+        role: userData.role || UserRole.USER,
+        department: userData.department || (userData.role === UserRole.AGENT ? Department.GENERAL_SUPPORT : Department.UNKNOWN),
+        specialization: userData.specialization || '',
+        status: UserStatus.OFFLINE
+      });
+
+      await newUser.save();
+
+      // Remove password from response
+      const userResponse = newUser.toObject();
+      delete (userResponse as any).password;
+
       return {
-        success: false,
-        message: 'User with this email or username already exists'
+        success: true,
+        user: userResponse,
+        message: 'User registered successfully'
       };
-    }
-
-    // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(userData.password, saltRounds);
-
-    // Create new user
-    const newUser = new User({
-      username: userData.username,
-      email: userData.email,
-      password: hashedPassword,
-      role: userData.role || UserRole.USER,
-      department: userData.department || (userData.role === UserRole.AGENT ? Department.GENERAL_SUPPORT : Department.UNKNOWN),
-      specialization: userData.specialization || '',
-      status: UserStatus.OFFLINE
-    });
-
-    await newUser.save();
-
-    // Remove password from response
-    const userResponse = newUser.toObject();
-    delete (userResponse as any).password;
-
-    return {
-      success: true,
-      user: userResponse,
-      message: 'User registered successfully'
-    };
   }
 
   // User login
   async login(email: string, password: string): Promise<LoginResult> {
-    // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return {
-        success: false,
-        message: 'Invalid email or password'
+      // Find user by email
+      const user = await User.findOne({ email: email.toLowerCase() });
+      if (!user) {
+        return {
+          success: false,
+          message: 'Invalid email or password'
+        };
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        return {
+          success: false,
+          message: 'Invalid email or password'
+        };
+      }
+
+      // Generate session
+      const sessionId = this.generateSessionId();
+      const authSession: AuthSession = {
+        userId: (user._id as any).toString(),
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        sessionId,
+        createdAt: new Date(),
+        lastActivity: new Date()
       };
-    }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
+      // Store session
+      this.activeSessions.set(sessionId, authSession);
+
+      // Update user status
+      await User.findByIdAndUpdate(user._id, {
+        status: UserStatus.ONLINE,
+        isOnline: true,
+        lastSeen: new Date()
+      });
+
       return {
-        success: false,
-        message: 'Invalid email or password'
+        success: true,
+        user: authSession,
+        message: 'Login successful'
       };
-    }
-
-    // Generate session
-    const sessionId = this.generateSessionId();
-    const authSession: AuthSession = {
-      userId: (user._id as any).toString(),
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      sessionId,
-      createdAt: new Date(),
-      lastActivity: new Date()
-    };
-
-    // Store session
-    this.activeSessions.set(sessionId, authSession);
-
-    // Update user status
-    await User.findByIdAndUpdate(user._id, {
-      status: UserStatus.ONLINE,
-      isOnline: true,
-      lastSeen: new Date()
-    });
-
-    return {
-      success: true,
-      user: authSession,
-      message: 'Login successful'
-    };
   }
 
   // Session validation
   async validateSession(sessionId: string): Promise<AuthSession | null> {
-    const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      return null;
-    }
+      const session = this.activeSessions.get(sessionId);
+      if (!session) {
+        return null;
+      }
 
-    // Check if session is expired (24 hours)
-    const sessionAge = Date.now() - session.createdAt.getTime();
-    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      // Check if session is expired (24 hours)
+      const sessionAge = Date.now() - session.createdAt.getTime();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
 
-    if (sessionAge > maxAge) {
-      this.activeSessions.delete(sessionId);
-      return null;
-    }
+      if (sessionAge > maxAge) {
+        this.activeSessions.delete(sessionId);
+        return null;
+      }
 
-    // Update last activity
-    session.lastActivity = new Date();
-    this.activeSessions.set(sessionId, session);
+      // Update last activity
+      session.lastActivity = new Date();
+      this.activeSessions.set(sessionId, session);
 
-    return session;
+      return session;
   }
 
   // Logout
   async logout(sessionId: string): Promise<boolean> {
-    const session = this.activeSessions.get(sessionId);
-    if (session) {
-      // Update user status
-      await User.findByIdAndUpdate(session.userId, {
-        status: UserStatus.OFFLINE,
-        isOnline: false,
-        lastSeen: new Date(),
-        socketId: undefined
-      });
+      const session = this.activeSessions.get(sessionId);
+      if (session) {
+        // Update user status
+        await User.findByIdAndUpdate(session.userId, {
+          status: UserStatus.OFFLINE,
+          isOnline: false,
+          lastSeen: new Date(),
+          socketId: undefined
+        });
 
-      // Clear from cache
-      await this.cacheService.setUserOffline(session.userId);
+        // Clear from cache
+        await this.cacheService.setUserOffline(session.userId);
 
-      // Remove session
-      this.activeSessions.delete(sessionId);
-    }
+        // Remove session
+        this.activeSessions.delete(sessionId);
+      }
 
-    return true;
+      return true;
   }
 
   // Generate session ID
@@ -181,7 +181,7 @@ export class AuthService {
       throw new ApiError(400, 'Invalid user ID format');
     }
 
-    return await User.findById(userId).select('-password');
+      return await User.findById(userId).select('-password');
   }
 
   // Update user status
@@ -190,45 +190,45 @@ export class AuthService {
       throw new ApiError(400, 'Invalid user ID format');
     }
 
-    const updateData: any = {
-      status,
-      isOnline: status !== UserStatus.OFFLINE,
-      lastSeen: new Date()
-    };
+      const updateData: any = {
+        status,
+        isOnline: status !== UserStatus.OFFLINE,
+        lastSeen: new Date()
+      };
 
-    if (socketId) {
-      updateData.socketId = socketId;
-    }
+      if (socketId) {
+        updateData.socketId = socketId;
+      }
 
-    await User.findByIdAndUpdate(userId, updateData);
+      await User.findByIdAndUpdate(userId, updateData);
 
-    // Update cache
-    if (status === UserStatus.OFFLINE) {
-      await this.cacheService.setUserOffline(userId);
-    } else if (socketId) {
-      await this.cacheService.setUserOnline(userId, socketId);
-    }
+      // Update cache
+      if (status === UserStatus.OFFLINE) {
+        await this.cacheService.setUserOffline(userId);
+      } else if (socketId) {
+        await this.cacheService.setUserOnline(userId, socketId);
+      }
 
-    return true;
+      return true;
   }
 
   // Get online agents
   async getOnlineAgents(): Promise<IUser[]> {
-    // Get agents who are marked as online AND have active sessions
-    const activeSessionUserIds = Array.from(this.activeSessions.values()).map(session => session.userId);
-    
-    return await User.find({
-      _id: { $in: activeSessionUserIds },
-      role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
-      isOnline: true
-    }).select('-password');
+      // Get agents who are marked as online AND have active sessions
+      const activeSessionUserIds = Array.from(this.activeSessions.values()).map(session => session.userId);
+      
+      return await User.find({
+        _id: { $in: activeSessionUserIds },
+        role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
+        isOnline: true
+      }).select('-password');
   }
 
   // Get all agents
   async getAllAgents(): Promise<IUser[]> {
-    return await User.find({
-      role: { $in: [UserRole.AGENT, UserRole.ADMIN] }
-    }).select('-password');
+      return await User.find({
+        role: { $in: [UserRole.AGENT, UserRole.ADMIN] }
+      }).select('-password');
   }
 
   // Permission check

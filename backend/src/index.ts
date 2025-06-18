@@ -31,7 +31,7 @@ async function startServer() {
       // Clean expired sessions every hour
       setInterval(() => {
         const authService = AuthService.getInstance();
-        authService.cleanExpiredSessions();
+        // authService.cleanExpiredSessions();
         console.log('🧹 Cleaned expired sessions');
       }, 60 * 60 * 1000);
     });

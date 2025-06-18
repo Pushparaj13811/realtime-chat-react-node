@@ -40,85 +40,85 @@ export class MessageService {
 
   // Create a new message
   async createMessage(messageData: CreateMessageData): Promise<IMessage | null> {
-    // Validate chat room exists and user is participant
-    const chatRoom = await ChatRoom.findById(messageData.chatRoomId);
-    if (!chatRoom) {
+      // Validate chat room exists and user is participant
+      const chatRoom = await ChatRoom.findById(messageData.chatRoomId);
+      if (!chatRoom) {
       throw new ApiError(404, 'Chat room not found');
-    }
+      }
 
-    if (!chatRoom.participants.includes(new mongoose.Types.ObjectId(messageData.senderId))) {
+      if (!chatRoom.participants.includes(new mongoose.Types.ObjectId(messageData.senderId))) {
       throw new ApiError(403, 'User is not a participant in this chat room');
-    }
+      }
 
-    // Create message
-    const message = new Message({
-      chatRoomId: messageData.chatRoomId,
-      senderId: messageData.senderId,
-      receiverId: messageData.receiverId,
-      content: messageData.content,
-      messageType: messageData.messageType || MessageType.TEXT,
-      status: MessageStatus.SENT,
-      replyTo: messageData.replyTo,
-      metadata: messageData.metadata
-    });
+      // Create message
+      const message = new Message({
+        chatRoomId: messageData.chatRoomId,
+        senderId: messageData.senderId,
+        receiverId: messageData.receiverId,
+        content: messageData.content,
+        messageType: messageData.messageType || MessageType.TEXT,
+        status: MessageStatus.SENT,
+        replyTo: messageData.replyTo,
+        metadata: messageData.metadata
+      });
 
-    await message.save();
+      await message.save();
 
-    // Update chat room's last message and activity
-    await ChatRoom.findByIdAndUpdate(messageData.chatRoomId, {
-      lastMessage: message._id,
-      lastActivity: new Date()
-    });
+      // Update chat room's last message and activity
+      await ChatRoom.findByIdAndUpdate(messageData.chatRoomId, {
+        lastMessage: message._id,
+        lastActivity: new Date()
+      });
 
-    // Cache the message
-    await this.cacheService.cacheMessage(message);
+      // Cache the message
+      await this.cacheService.cacheMessage(message);
 
-    // Populate sender info for response
-    await message.populate('senderId', 'username email role');
+      // Populate sender info for response
+      await message.populate('senderId', 'username email role');
 
-    return message;
+      return message;
   }
 
   // Get messages for a chat room
   async getMessages(query: MessageQuery): Promise<IMessage[]> {
-    const { chatRoomId, page = 1, limit = 50, before, after } = query;
+      const { chatRoomId, page = 1, limit = 50, before, after } = query;
 
-    // Try to get from cache first
-    const cachedMessages = await this.cacheService.getCachedMessages(
-      chatRoomId,
-      limit,
-      (page - 1) * limit
-    );
+      // Try to get from cache first
+      const cachedMessages = await this.cacheService.getCachedMessages(
+        chatRoomId,
+        limit,
+        (page - 1) * limit
+      );
 
-    if (cachedMessages.length > 0) {
-      // Convert cached messages to full message objects if needed
-      return this.convertCachedToMessages(cachedMessages);
-    }
+      if (cachedMessages.length > 0) {
+        // Convert cached messages to full message objects if needed
+        return this.convertCachedToMessages(cachedMessages);
+      }
 
-    // Build query
-    const mongoQuery: any = { chatRoomId };
+      // Build query
+      const mongoQuery: any = { chatRoomId };
 
-    if (before || after) {
-      mongoQuery.createdAt = {};
-      if (before) mongoQuery.createdAt.$lt = before;
-      if (after) mongoQuery.createdAt.$gt = after;
-    }
+      if (before || after) {
+        mongoQuery.createdAt = {};
+        if (before) mongoQuery.createdAt.$lt = before;
+        if (after) mongoQuery.createdAt.$gt = after;
+      }
 
     // Get from database (sort by createdAt ascending for chronological order)
-    const messages = await Message.find(mongoQuery)
-      .populate('senderId', 'username email role')
-      .populate('receiverId', 'username email role')
-      .populate('replyTo')
+      const messages = await Message.find(mongoQuery)
+        .populate('senderId', 'username email role')
+        .populate('receiverId', 'username email role')
+        .populate('replyTo')
       .sort({ createdAt: 1 })
-      .limit(limit)
-      .skip((page - 1) * limit);
+        .limit(limit)
+        .skip((page - 1) * limit);
 
-    // Cache the messages
-    for (const message of messages) {
-      await this.cacheService.cacheMessage(message);
-    }
+      // Cache the messages
+      for (const message of messages) {
+        await this.cacheService.cacheMessage(message);
+      }
 
-    return messages;
+      return messages;
   }
 
   // Update message delivery status
@@ -131,34 +131,34 @@ export class MessageService {
       throw new ApiError(400, 'Invalid user ID format');
     }
 
-    const message = await Message.findById(messageId);
-    if (!message) {
+      const message = await Message.findById(messageId);
+      if (!message) {
       throw new ApiError(404, 'Message not found');
-    }
-
-    // Check if already marked as delivered by this user
-    const alreadyDelivered = message.deliveredTo.some(
-      delivery => delivery.userId.toString() === userId
-    );
-
-    if (!alreadyDelivered) {
-      message.deliveredTo.push({
-        userId: new mongoose.Types.ObjectId(userId),
-        deliveredAt: new Date()
-      });
-
-      // Update status if this is the first delivery
-      if (message.status === MessageStatus.SENT) {
-        message.status = MessageStatus.DELIVERED;
       }
 
-      await message.save();
+      // Check if already marked as delivered by this user
+      const alreadyDelivered = message.deliveredTo.some(
+        delivery => delivery.userId.toString() === userId
+      );
 
-      // Update cache
-      await this.cacheService.cacheMessage(message);
-    }
+      if (!alreadyDelivered) {
+        message.deliveredTo.push({
+          userId: new mongoose.Types.ObjectId(userId),
+          deliveredAt: new Date()
+        });
 
-    return true;
+        // Update status if this is the first delivery
+        if (message.status === MessageStatus.SENT) {
+          message.status = MessageStatus.DELIVERED;
+        }
+
+        await message.save();
+
+        // Update cache
+        await this.cacheService.cacheMessage(message);
+      }
+
+      return true;
   }
 
   // Update message read status
@@ -171,22 +171,22 @@ export class MessageService {
       throw new ApiError(400, 'Invalid user ID format');
     }
 
-    const message = await Message.findById(messageId);
-    if (!message) {
+      const message = await Message.findById(messageId);
+      if (!message) {
       throw new ApiError(404, 'Message not found');
     }
 
     // Don't allow reading own messages
     if (message.senderId.toString() === userId) {
-      return false;
-    }
+        return false;
+      }
 
-    // Check if already marked as read by this user
-    const alreadyRead = message.readBy.some(
-      read => read.userId.toString() === userId
-    );
+      // Check if already marked as read by this user
+      const alreadyRead = message.readBy.some(
+        read => read.userId.toString() === userId
+      );
 
-    if (!alreadyRead) {
+      if (!alreadyRead) {
       // Ensure the message is marked as delivered first
       const alreadyDelivered = message.deliveredTo.some(
         delivery => delivery.userId.toString() === userId
@@ -201,47 +201,47 @@ export class MessageService {
 
       message.readBy.push({
         userId: new mongoose.Types.ObjectId(userId),
-        readAt: new Date()
-      });
+          readAt: new Date()
+        });
 
       // Update status based on delivery/read state
       if (message.status === MessageStatus.SENT || message.status === MessageStatus.DELIVERED) {
         message.status = MessageStatus.READ;
       }
 
-      await message.save();
+        await message.save();
 
-      // Update cache
-      await this.cacheService.cacheMessage(message);
-    }
+        // Update cache
+        await this.cacheService.cacheMessage(message);
+      }
 
-    return true;
+      return true;
   }
 
   // Mark multiple messages as read
   async markMultipleAsRead(messageIds: string[], userId: string): Promise<number> {
-    let updatedCount = 0;
+      let updatedCount = 0;
 
-    for (const messageId of messageIds) {
-      const success = await this.markAsRead(messageId, userId);
-      if (success) updatedCount++;
-    }
+      for (const messageId of messageIds) {
+        const success = await this.markAsRead(messageId, userId);
+        if (success) updatedCount++;
+      }
 
-    return updatedCount;
+      return updatedCount;
   }
 
   // Get unread message count for a user
   async getUnreadCount(userId: string, chatRoomId?: string): Promise<number> {
-    const query: any = {
-      'readBy.userId': { $ne: new mongoose.Types.ObjectId(userId) },
-      senderId: { $ne: new mongoose.Types.ObjectId(userId) }
-    };
+      const query: any = {
+        'readBy.userId': { $ne: new mongoose.Types.ObjectId(userId) },
+        senderId: { $ne: new mongoose.Types.ObjectId(userId) }
+      };
 
-    if (chatRoomId) {
-      query.chatRoomId = chatRoomId;
-    }
+      if (chatRoomId) {
+        query.chatRoomId = chatRoomId;
+      }
 
-    return await Message.countDocuments(query);
+      return await Message.countDocuments(query);
   }
 
   // Get unread count per chat room for a user (with privacy controls)
@@ -353,46 +353,46 @@ export class MessageService {
 
   // Get message statistics
   async getMessageStats(chatRoomId: string): Promise<any> {
-    const stats = await Message.aggregate([
-      { $match: { chatRoomId: new mongoose.Types.ObjectId(chatRoomId) } },
-      {
-        $group: {
-          _id: null,
-          totalMessages: { $sum: 1 },
-          sentCount: {
-            $sum: { $cond: [{ $eq: ['$status', MessageStatus.SENT] }, 1, 0] }
-          },
-          deliveredCount: {
-            $sum: { $cond: [{ $eq: ['$status', MessageStatus.DELIVERED] }, 1, 0] }
-          },
-          readCount: {
-            $sum: { $cond: [{ $eq: ['$status', MessageStatus.READ] }, 1, 0] }
-          },
-          messageTypes: {
-            $push: '$messageType'
+      const stats = await Message.aggregate([
+        { $match: { chatRoomId: new mongoose.Types.ObjectId(chatRoomId) } },
+        {
+          $group: {
+            _id: null,
+            totalMessages: { $sum: 1 },
+            sentCount: {
+              $sum: { $cond: [{ $eq: ['$status', MessageStatus.SENT] }, 1, 0] }
+            },
+            deliveredCount: {
+              $sum: { $cond: [{ $eq: ['$status', MessageStatus.DELIVERED] }, 1, 0] }
+            },
+            readCount: {
+              $sum: { $cond: [{ $eq: ['$status', MessageStatus.READ] }, 1, 0] }
+            },
+            messageTypes: {
+              $push: '$messageType'
+            }
           }
         }
-      }
-    ]);
+      ]);
 
-    return stats[0] || {
-      totalMessages: 0,
-      sentCount: 0,
-      deliveredCount: 0,
-      readCount: 0,
-      messageTypes: []
-    };
+      return stats[0] || {
+        totalMessages: 0,
+        sentCount: 0,
+        deliveredCount: 0,
+        readCount: 0,
+        messageTypes: []
+      };
   }
 
   // Search messages
   async searchMessages(chatRoomId: string, searchTerm: string, limit: number = 20): Promise<IMessage[]> {
-    return await Message.find({
-      chatRoomId,
-      content: { $regex: searchTerm, $options: 'i' }
-    })
-      .populate('senderId', 'username email role')
+      return await Message.find({
+        chatRoomId,
+        content: { $regex: searchTerm, $options: 'i' }
+      })
+        .populate('senderId', 'username email role')
       .sort({ createdAt: 1 })
-      .limit(limit);
+        .limit(limit);
   }
 
   // Delete message (soft delete)
@@ -401,26 +401,26 @@ export class MessageService {
       throw new ApiError(400, 'Invalid message ID format');
     }
 
-    const message = await Message.findById(messageId);
-    if (!message) {
+      const message = await Message.findById(messageId);
+      if (!message) {
       throw new ApiError(404, 'Message not found');
-    }
+      }
 
-    // Only sender can delete their message
-    if (message.senderId.toString() !== userId) {
+      // Only sender can delete their message
+      if (message.senderId.toString() !== userId) {
       throw new ApiError(403, 'Only message sender can delete this message');
-    }
+      }
 
-    // Soft delete by updating content
-    message.content = 'This message was deleted';
-    message.isEdited = true;
-    message.editedAt = new Date();
-    await message.save();
+      // Soft delete by updating content
+      message.content = 'This message was deleted';
+      message.isEdited = true;
+      message.editedAt = new Date();
+      await message.save();
 
-    // Update cache
-    await this.cacheService.cacheMessage(message);
+      // Update cache
+      await this.cacheService.cacheMessage(message);
 
-    return true;
+      return true;
   }
 
   // Edit message
@@ -429,25 +429,25 @@ export class MessageService {
       throw new ApiError(400, 'Invalid message ID format');
     }
 
-    const message = await Message.findById(messageId);
-    if (!message) {
+      const message = await Message.findById(messageId);
+      if (!message) {
       throw new ApiError(404, 'Message not found');
-    }
+      }
 
-    // Only sender can edit their message
-    if (message.senderId.toString() !== userId) {
+      // Only sender can edit their message
+      if (message.senderId.toString() !== userId) {
       throw new ApiError(403, 'Only message sender can edit this message');
-    }
+      }
 
-    message.content = newContent;
-    message.isEdited = true;
-    message.editedAt = new Date();
-    await message.save();
+      message.content = newContent;
+      message.isEdited = true;
+      message.editedAt = new Date();
+      await message.save();
 
-    // Update cache
-    await this.cacheService.cacheMessage(message);
+      // Update cache
+      await this.cacheService.cacheMessage(message);
 
-    return message;
+      return message;
   }
 
   // Helper method to convert cached messages to full message objects

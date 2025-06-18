@@ -20,252 +20,252 @@ export class ChatController {
 
   // Create a new chat room
   createChatRoom = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const { type, participants = [], name, assignedAgent, metadata } = req.body;
+      const userId = (req as any).user?.userId;
+      const { type, participants = [], name, assignedAgent, metadata } = req.body;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    if (!type) {
-      throw new ApiError(400, 'Type is required');
-    }
+      if (!type) {
+        throw new ApiError(400, 'Type is required');
+      }
 
-    console.log(`📝 ChatController: Creating chat room for user ${userId}:`, {
-      type,
-      participants,
-      assignedAgent,
-      metadata
-    });
+      console.log(`📝 ChatController: Creating chat room for user ${userId}:`, {
+        type,
+        participants,
+        assignedAgent,
+        metadata
+      });
 
-    // Ensure participants is an array
-    const participantIds = Array.isArray(participants) ? participants : [];
-    
-    // Add current user to participants if not already included
-    const allParticipants = participantIds.includes(userId) 
-      ? participantIds 
-      : [...participantIds, userId];
+      // Ensure participants is an array
+      const participantIds = Array.isArray(participants) ? participants : [];
+      
+      // Add current user to participants if not already included
+      const allParticipants = participantIds.includes(userId) 
+        ? participantIds 
+        : [...participantIds, userId];
 
-    console.log(`👥 ChatController: Final participants list:`, allParticipants);
+      console.log(`👥 ChatController: Final participants list:`, allParticipants);
 
-    const chatRoom = await this.chatRoomService.createChatRoom({
-      type,
-      createdBy: userId,
-      participants: allParticipants,
-      name,
-      assignedAgent,
-      metadata
-    });
+      const chatRoom = await this.chatRoomService.createChatRoom({
+        type,
+        createdBy: userId,
+        participants: allParticipants,
+        name,
+        assignedAgent,
+        metadata
+      });
 
-    if (chatRoom) {
-      const response = new ApiResponse(201, 'Chat room created', chatRoom);
-      res.status(201).json(response.toJSON());
-    } else {
-      throw new ApiError(400, 'Failed to create chat room');
+      if (chatRoom) {
+        const response = new ApiResponse(201, 'Chat room created', chatRoom);
+        res.status(201).json(response.toJSON());
+      } else {
+        throw new ApiError(400, 'Failed to create chat room');
     }
   };
 
   // Get user's chat rooms
   getUserChatRooms = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const { type } = req.query;
+      const userId = (req as any).user?.userId;
+      const { type } = req.query;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    const chatRooms = await this.chatRoomService.getUserChatRooms(
-      userId,
-      type as ChatRoomType
-    );
+      const chatRooms = await this.chatRoomService.getUserChatRooms(
+        userId,
+        type as ChatRoomType
+      );
 
-    const response = new ApiResponse(200, 'User chat rooms fetched', chatRooms);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'User chat rooms fetched', chatRooms);
+      res.status(200).json(response.toJSON());
   };
 
   // Get agent's assigned chat rooms
   getAgentChatRooms = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const userRole = (req as any).user?.role;
-    const { status } = req.query;
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
+      const { status } = req.query;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    // Only agents can access this endpoint
-    if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
-      throw new ApiError(403, 'Agent access required');
-    }
+      // Only agents can access this endpoint
+      if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
+        throw new ApiError(403, 'Agent access required');
+      }
 
-    const chatRooms = await this.chatRoomService.getAgentChatRooms(
-      userId,
-      status as ChatRoomStatus
-    );
+      const chatRooms = await this.chatRoomService.getAgentChatRooms(
+        userId,
+        status as ChatRoomStatus
+      );
 
-    const response = new ApiResponse(200, 'Agent chat rooms fetched', chatRooms);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Agent chat rooms fetched', chatRooms);
+      res.status(200).json(response.toJSON());
   };
 
   // Get chat room by ID
   getChatRoom = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const { chatRoomId } = req.params;
+      const userId = (req as any).user?.userId;
+      const { chatRoomId } = req.params;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    const chatRoom = await this.chatRoomService.getChatRoomById(chatRoomId);
+      const chatRoom = await this.chatRoomService.getChatRoomById(chatRoomId);
 
-    if (!chatRoom) {
-      throw new ApiError(404, 'Chat room not found');
-    }
+      if (!chatRoom) {
+        throw new ApiError(404, 'Chat room not found');
+      }
 
-    // Check if user has access to this chat room
-    const isParticipant = chatRoom.participants.some(
-      p => p._id.toString() === userId
-    );
-    const isAssignedAgent = chatRoom.assignedAgent?._id.toString() === userId;
+      // Check if user has access to this chat room
+      const isParticipant = chatRoom.participants.some(
+        p => p._id.toString() === userId
+      );
+      const isAssignedAgent = chatRoom.assignedAgent?._id.toString() === userId;
 
-    if (!isParticipant && !isAssignedAgent) {
-      throw new ApiError(403, 'Access denied');
-    }
+      if (!isParticipant && !isAssignedAgent) {
+        throw new ApiError(403, 'Access denied');
+      }
 
-    const response = new ApiResponse(200, 'Chat room fetched', chatRoom);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Chat room fetched', chatRoom);
+      res.status(200).json(response.toJSON());
   };
 
   // Get messages for a chat room
   getMessages = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const { chatRoomId } = req.params;
-    const { page = 1, limit = 50, before, after } = req.query;
+      const userId = (req as any).user?.userId;
+      const { chatRoomId } = req.params;
+      const { page = 1, limit = 50, before, after } = req.query;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    // Verify user has access to this chat room
-    const chatRoom = await this.chatRoomService.getChatRoomById(chatRoomId);
-    if (!chatRoom) {
-      throw new ApiError(404, 'Chat room not found');
-    }
+      // Verify user has access to this chat room
+      const chatRoom = await this.chatRoomService.getChatRoomById(chatRoomId);
+      if (!chatRoom) {
+        throw new ApiError(404, 'Chat room not found');
+      }
 
-    const isParticipant = chatRoom.participants.some(
-      p => p._id.toString() === userId
-    );
-    const isAssignedAgent = chatRoom.assignedAgent?._id.toString() === userId;
+      const isParticipant = chatRoom.participants.some(
+        p => p._id.toString() === userId
+      );
+      const isAssignedAgent = chatRoom.assignedAgent?._id.toString() === userId;
 
-    if (!isParticipant && !isAssignedAgent) {
-      throw new ApiError(403, 'Access denied');
-    }
+      if (!isParticipant && !isAssignedAgent) {
+        throw new ApiError(403, 'Access denied');
+      }
 
-    const messages = await this.messageService.getMessages({
-      chatRoomId,
-      page: parseInt(page as string),
-      limit: parseInt(limit as string),
-      before: before ? new Date(before as string) : undefined,
-      after: after ? new Date(after as string) : undefined
-    });
+      const messages = await this.messageService.getMessages({
+        chatRoomId,
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        before: before ? new Date(before as string) : undefined,
+        after: after ? new Date(after as string) : undefined
+      });
 
-    const response = new ApiResponse(200, 'Messages fetched', messages);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Messages fetched', messages);
+      res.status(200).json(response.toJSON());
   };
 
   // Assign agent to chat room
   assignAgent = async (req: Request, res: Response): Promise<void> => {
     const userId = (req as any).user?.userId;
-    const userRole = (req as any).user?.role;
-    const { chatRoomId, agentId, reason } = req.body;
+      const userRole = (req as any).user?.role;
+      const { chatRoomId, agentId, reason } = req.body;
 
     if (!userId) {
       throw new ApiError(401, 'Authentication required');
     }
 
     // Only agents and admins can assign agents
-    if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
-      throw new ApiError(403, 'Agent access required');
-    }
+      if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
+        throw new ApiError(403, 'Agent access required');
+      }
 
-    if (!chatRoomId || !agentId) {
-      throw new ApiError(400, 'Chat room ID and agent ID are required');
-    }
+      if (!chatRoomId || !agentId) {
+        throw new ApiError(400, 'Chat room ID and agent ID are required');
+      }
 
-    const success = await this.chatRoomService.assignAgent({
-      chatRoomId,
-      agentId,
-      reason
-    });
+      const success = await this.chatRoomService.assignAgent({
+        chatRoomId,
+        agentId,
+        reason
+      });
 
-    const response = new ApiResponse(200, success ? 'Agent assigned successfully' : 'Failed to assign agent');
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, success ? 'Agent assigned successfully' : 'Failed to assign agent');
+      res.status(200).json(response.toJSON());
   };
 
   // Transfer chat to another agent
   transferChat = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const userRole = (req as any).user?.role;
-    const { chatRoomId, toAgentId, reason } = req.body;
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
+      const { chatRoomId, toAgentId, reason } = req.body;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    // Only agents can transfer chats
-    if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
-      throw new ApiError(403, 'Agent access required');
-    }
+      // Only agents can transfer chats
+      if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
+        throw new ApiError(403, 'Agent access required');
+      }
 
-    if (!chatRoomId || !toAgentId) {
-      throw new ApiError(400, 'Chat room ID and target agent ID are required');
-    }
+      if (!chatRoomId || !toAgentId) {
+        throw new ApiError(400, 'Chat room ID and target agent ID are required');
+      }
 
-    const success = await this.chatRoomService.transferChat(
-      chatRoomId,
-      userId,
-      toAgentId,
-      reason
-    );
+      const success = await this.chatRoomService.transferChat(
+        chatRoomId,
+        userId,
+        toAgentId,
+        reason
+      );
 
-    const response = new ApiResponse(200, success ? 'Chat transferred successfully' : 'Failed to transfer chat');
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, success ? 'Chat transferred successfully' : 'Failed to transfer chat');
+      res.status(200).json(response.toJSON());
   };
 
   // Close chat room
   closeChatRoom = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-    const userRole = (req as any).user?.role;
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
     const { chatRoomId } = req.body;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
     if (!chatRoomId) {
       throw new ApiError(400, 'Chat room ID is required');
     }
 
     // Only agents and admins can close chat rooms
-    if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
-      throw new ApiError(403, 'Agent access required');
-    }
+      if (!this.authService.hasPermission(userRole, UserRole.AGENT)) {
+        throw new ApiError(403, 'Agent access required');
+      }
 
-    const success = await this.chatRoomService.closeChatRoom(chatRoomId, userId);
+      const success = await this.chatRoomService.closeChatRoom(chatRoomId, userId);
 
-    const response = new ApiResponse(200, success ? 'Chat room closed successfully' : 'Failed to close chat room');
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, success ? 'Chat room closed successfully' : 'Failed to close chat room');
+      res.status(200).json(response.toJSON());
   };
 
   // Get unread message count
   getUnreadCount = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
+      const userId = (req as any).user?.userId;
     const userRole = (req as any).user?.role;
-    const { chatRoomId } = req.query;
+      const { chatRoomId } = req.query;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
     let unreadData;
 
@@ -283,128 +283,128 @@ export class ChatController {
     }
 
     const response = new ApiResponse(200, 'Unread count fetched', unreadData);
-    res.status(200).json(response.toJSON());
+      res.status(200).json(response.toJSON());
   };
 
   // Search messages
   searchMessages = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
+      const userId = (req as any).user?.userId;
     const { chatRoomId, searchTerm, limit = 20 } = req.query;
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
     if (!chatRoomId || !searchTerm) {
       throw new ApiError(400, 'Chat room ID and search term are required');
-    }
+      }
 
-    // Verify user has access to this chat room
+      // Verify user has access to this chat room
     const chatRoom = await this.chatRoomService.getChatRoomById(chatRoomId as string);
-    if (!chatRoom) {
-      throw new ApiError(404, 'Chat room not found');
-    }
+      if (!chatRoom) {
+        throw new ApiError(404, 'Chat room not found');
+      }
 
-    const isParticipant = chatRoom.participants.some(
-      p => p._id.toString() === userId
-    );
-    const isAssignedAgent = chatRoom.assignedAgent?._id.toString() === userId;
+      const isParticipant = chatRoom.participants.some(
+        p => p._id.toString() === userId
+      );
+      const isAssignedAgent = chatRoom.assignedAgent?._id.toString() === userId;
 
-    if (!isParticipant && !isAssignedAgent) {
-      throw new ApiError(403, 'Access denied');
-    }
+      if (!isParticipant && !isAssignedAgent) {
+        throw new ApiError(403, 'Access denied');
+      }
 
-    const messages = await this.messageService.searchMessages(
+      const messages = await this.messageService.searchMessages(
       chatRoomId as string,
-      searchTerm as string,
-      parseInt(limit as string)
-    );
+        searchTerm as string,
+        parseInt(limit as string)
+      );
 
     const response = new ApiResponse(200, 'Messages searched', messages);
-    res.status(200).json(response.toJSON());
+      res.status(200).json(response.toJSON());
   };
 
   // Get chat room statistics (admin only)
   getChatRoomStats = async (req: Request, res: Response): Promise<void> => {
-    const userRole = (req as any).user?.role;
+      const userRole = (req as any).user?.role;
 
-    if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
-      throw new ApiError(403, 'Admin access required');
-    }
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
 
-    const stats = await this.chatRoomService.getChatRoomStats();
+      const stats = await this.chatRoomService.getChatRoomStats();
 
-    const response = new ApiResponse(200, 'Chat room stats fetched', stats);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Chat room stats fetched', stats);
+      res.status(200).json(response.toJSON());
   };
 
   // Get online users
   getOnlineUsers = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
-
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      const userId = (req as any).user?.userId;
+      
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
     const onlineUsers = await this.authService.getOnlineAgents();
 
-    const response = new ApiResponse(200, 'Online users fetched', onlineUsers);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Online users fetched', onlineUsers);
+      res.status(200).json(response.toJSON());
   };
 
   // Get online agents
   getOnlineAgents = async (req: Request, res: Response): Promise<void> => {
-    const userId = (req as any).user?.userId;
+      const userId = (req as any).user?.userId;
+      
+      if (!userId) {
+        throw new ApiError(401, 'Authentication required');
+      }
 
-    if (!userId) {
-      throw new ApiError(401, 'Authentication required');
-    }
+      const onlineAgents = await this.authService.getOnlineAgents();
 
-    const onlineAgents = await this.authService.getOnlineAgents();
-
-    const response = new ApiResponse(200, 'Online agents fetched', onlineAgents);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Online agents fetched', onlineAgents);
+      res.status(200).json(response.toJSON());
   };
 
   // Admin: Transfer agent between chats
   transferAgentBetweenChats = async (req: Request, res: Response): Promise<void> => {
     const userRole = (req as any).user?.role;
-    const userId = (req as any).user?.userId;
-    const { fromChatId, toChatId, agentId, reason } = req.body;
+      const userId = (req as any).user?.userId;
+      const { fromChatId, toChatId, agentId, reason } = req.body;
 
-    if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
-      throw new ApiError(403, 'Admin access required');
-    }
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
 
-    if (!fromChatId || !toChatId || !agentId) {
-      throw new ApiError(400, 'From chat ID, to chat ID, and agent ID are required');
-    }
+      if (!fromChatId || !toChatId || !agentId) {
+        throw new ApiError(400, 'From chat ID, to chat ID, and agent ID are required');
+      }
 
-    const success = await this.chatRoomService.transferAgentBetweenChats(
-      fromChatId,
-      toChatId,
-      agentId,
-      userId,
-      reason
-    );
+      const success = await this.chatRoomService.transferAgentBetweenChats(
+        fromChatId,
+        toChatId,
+        agentId,
+        userId,
+        reason
+      );
 
     if (!success) {
       throw new ApiError(400, 'Failed to transfer agent between chats');
     }
 
     const response = new ApiResponse(200, 'Agent transferred between chats successfully');
-    res.status(200).json(response.toJSON());
+      res.status(200).json(response.toJSON());
   };
 
   // Admin: Remove agent from chat
   removeAgentFromChat = async (req: Request, res: Response): Promise<void> => {
     const userRole = (req as any).user?.role;
-    const userId = (req as any).user?.userId;
+      const userId = (req as any).user?.userId;
     const { chatRoomId, reason } = req.body;
 
-    if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
-      throw new ApiError(403, 'Admin access required');
-    }
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
 
     if (!chatRoomId) {
       throw new ApiError(400, 'Chat room ID is required');
@@ -421,7 +421,7 @@ export class ChatController {
     }
 
     const response = new ApiResponse(200, 'Agent removed from chat successfully');
-    res.status(200).json(response.toJSON());
+      res.status(200).json(response.toJSON());
   };
 
   // Admin: Get all chat rooms
@@ -447,16 +447,16 @@ export class ChatController {
 
   // Admin: Get agent workload statistics
   getAgentWorkloadStats = async (req: Request, res: Response): Promise<void> => {
-    const userRole = (req as any).user?.role;
+      const userRole = (req as any).user?.role;
 
-    if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
-      throw new ApiError(403, 'Admin access required');
-    }
+      if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+        throw new ApiError(403, 'Admin access required');
+      }
 
-    const stats = await this.chatRoomService.getAgentWorkloadStats();
+      const stats = await this.chatRoomService.getAgentWorkloadStats();
 
-    const response = new ApiResponse(200, 'Agent workload stats fetched', stats);
-    res.status(200).json(response.toJSON());
+      const response = new ApiResponse(200, 'Agent workload stats fetched', stats);
+      res.status(200).json(response.toJSON());
   };
 
   // Admin: Transfer agent
