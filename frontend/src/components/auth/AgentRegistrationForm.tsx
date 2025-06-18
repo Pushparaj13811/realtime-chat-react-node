@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,8 @@ import {
   EyeOff,
   Shield,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole, Department } from '@/types';
@@ -51,8 +52,35 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [registrationError, setRegistrationError] = useState<string>('');
 
   const { state, clearError } = useAuth();
+
+  // Check if user is admin - use auth context instead of just the prop
+  const isAdmin = state.isAuthenticated && state.user?.role === UserRole.ADMIN;
+  const currentSessionId = state.user?.sessionId || adminSessionId;
+
+  // Auto-clear registration errors after 10 seconds
+  useEffect(() => {
+    if (registrationError) {
+      const timer = setTimeout(() => {
+        setRegistrationError('');
+      }, 10000); // 10 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [registrationError]);
+
+  // Auto-clear auth errors after 10 seconds
+  useEffect(() => {
+    if (state.error) {
+      const timer = setTimeout(() => {
+        clearError();
+      }, 10000); // 10 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [state.error, clearError]);
 
   // Validation rules
   const validateForm = (): boolean => {
@@ -101,9 +129,10 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError();
+    setRegistrationError(''); // Clear previous registration errors
 
-    if (!adminSessionId) {
+    if (!isAdmin || !currentSessionId) {
+      setRegistrationError('Admin access required to create agent accounts');
       return;
     }
 
@@ -137,12 +166,15 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
           specialization: '',
           notes: ''
         });
+        setValidationErrors({});
       } else {
         // Handle registration failure
-        console.error('Agent registration failed:', response.message);
+        setRegistrationError(response.message || 'Agent registration failed');
       }
     } catch (error) {
       console.error('Agent registration failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Agent registration failed';
+      setRegistrationError(errorMessage);
     }
   };
 
@@ -159,7 +191,15 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
     }
   };
 
-  if (!adminSessionId) {
+  const handleClearRegistrationError = () => {
+    setRegistrationError('');
+  };
+
+  const handleClearAuthError = () => {
+    clearError();
+  };
+
+  if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <Card className="w-full max-w-md">
@@ -400,10 +440,43 @@ export function AgentRegistrationForm({ onBack, adminSessionId }: AgentRegistrat
               />
             </div>
 
-            {/* Error Display */}
+            {/* Enhanced Registration Error Display */}
+            {registrationError && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm text-red-800 font-medium mb-1">Registration Failed</p>
+                    <p className="text-sm text-red-700">{registrationError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearRegistrationError}
+                    className="ml-2 text-red-400 hover:text-red-600 transition-colors"
+                    disabled={state.isLoading}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Enhanced Auth Error Display */}
             {state.error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm text-red-800">{state.error}</p>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm text-red-800 font-medium mb-1">Authentication Error</p>
+                    <p className="text-sm text-red-700">{state.error}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearAuthError}
+                    className="ml-2 text-red-400 hover:text-red-600 transition-colors"
+                    disabled={state.isLoading}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
 

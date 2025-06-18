@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,8 @@ import {
   Eye,
   EyeOff,
   Shield,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
@@ -36,6 +37,17 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const { state, register, clearError } = useAuth();
+
+  // Auto-clear auth errors after 10 seconds
+  useEffect(() => {
+    if (state.error) {
+      const timer = setTimeout(() => {
+        clearError();
+      }, 10000); // 10 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [state.error, clearError]);
 
   // Validation rules
   const validateForm = (): boolean => {
@@ -79,12 +91,13 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError();
 
+    // Validate form first
     if (!validateForm()) {
       return;
     }
 
+    // Don't clear error on every submission to prevent error flashing
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { confirmPassword, ...registerData } = formData;
     await register(registerData);
@@ -101,6 +114,10 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
         return newErrors;
       });
     }
+  };
+
+  const handleClearError = () => {
+    clearError();
   };
 
   return (
@@ -238,10 +255,23 @@ export function SignupForm({ onBackToLogin }: SignupFormProps) {
               )}
             </div>
 
-            {/* Error Display */}
+            {/* Enhanced Error Display */}
             {state.error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm text-red-800">{state.error}</p>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm text-red-800 font-medium mb-1">Registration Failed</p>
+                    <p className="text-sm text-red-700">{state.error}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearError}
+                    className="ml-2 text-red-400 hover:text-red-600 transition-colors"
+                    disabled={state.isLoading}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
 

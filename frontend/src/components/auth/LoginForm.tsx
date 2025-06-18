@@ -1,38 +1,108 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Mail, Lock, Loader2, ArrowRight } from 'lucide-react';
+import { MessageSquare, Mail, Lock, Loader2, ArrowRight, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface LoginFormProps {
   onNavigateToSignup?: () => void;
 }
 
+interface DemoCredential {
+  email: string;
+  password: string;
+  role: string;
+  label: string;
+  location?: string;
+}
+
 export function LoginForm({ onNavigateToSignup }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const { state, login, clearError } = useAuth();
 
+  // Clear form validation errors when user starts typing
+  useEffect(() => {
+    if (formErrors.email && email) {
+      setFormErrors(prev => ({ ...prev, email: '' }));
+    }
+  }, [email, formErrors.email]);
+
+  useEffect(() => {
+    if (formErrors.password && password) {
+      setFormErrors(prev => ({ ...prev, password: '' }));
+    }
+  }, [password, formErrors.password]);
+
+  // Auto-clear auth errors after 10 seconds
+  useEffect(() => {
+    if (state.error) {
+      const timer = setTimeout(() => {
+        clearError();
+      }, 10000); // 10 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [state.error, clearError]);
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    if (!password) {
+      errors.password = 'Password is required';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError();
+    
+    // Validate form first
+    if (!validateForm()) {
+      return;
+    }
+
+    // Only clear error if there's no validation error
+    // Don't clear on every submission to prevent error flashing
     await login({ email, password });
   };
 
-  const demoCredentials = [
-    { email: 'user@example.com', password: 'password123', role: 'USER' },
-    { email: 'agent@example.com', password: 'password123', role: 'AGENT' },
-    { email: 'admin@example.com', password: 'password123', role: 'ADMIN' }
+  const demoCredentials: DemoCredential[] = [
+    // 1 Admin - Nepali
+    { email: 'ram.admin@hamrotech.com', password: 'password123', role: 'ADMIN', label: 'Ram Shrestha - मुख्य प्रशासक', location: 'काठमाडौं' },
+    
+    // 2 Agents - Nepali
+    { email: 'suresh.agent@hamrotech.com', password: 'password123', role: 'AGENT', label: 'Suresh Gurung - प्राविधिक सहायता', location: 'पोखरा' },
+    { email: 'sunita.agent@hamrotech.com', password: 'password123', role: 'AGENT', label: 'Sunita Thapa - बिलिङ व्यवस्थापन', location: 'भक्तपुर' },
+    
+    // 4 Regular Users - Nepali
+    { email: 'aarti.paudel@technepal.com', password: 'password123', role: 'USER', label: 'Aarti Paudel - Software Engineer', location: 'काठमाडौं' },
+    { email: 'binod.sharma@digitalnepal.com', password: 'password123', role: 'USER', label: 'Binod Sharma - Digital Marketing', location: 'ललितपुर' },
+    { email: 'chitra.rai@designstudio.com', password: 'password123', role: 'USER', label: 'Chitra Rai - Product Designer', location: 'धरान' },
+    { email: 'dipesh.nepal@projecthub.com', password: 'password123', role: 'USER', label: 'Dipesh Nepal - Project Manager', location: 'बुटवल' }
   ];
 
-  const handleDemoLogin = async (credentials: { email: string; password: string }) => {
+  const handleDemoLogin = async (credentials: DemoCredential) => {
     setEmail(credentials.email);
     setPassword(credentials.password);
+    setFormErrors({}); // Clear form errors for demo login
+    await login({ email: credentials.email, password: credentials.password });
+  };
+
+  const handleClearError = () => {
     clearError();
-    await login(credentials);
   };
 
   return (
@@ -41,10 +111,10 @@ export function LoginForm({ onNavigateToSignup }: LoginFormProps) {
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <MessageSquare className="h-8 w-8 text-blue-600" />
-            <CardTitle className="text-2xl">Chat App</CardTitle>
+            <CardTitle className="text-2xl">हाम्रो Tech Chat</CardTitle>
           </div>
           <p className="text-gray-600">
-            Sign in to your account
+            Sign in to your account • तपाईंको खातामा लग इन गर्नुहोस्
           </p>
         </CardHeader>
 
@@ -64,8 +134,12 @@ export function LoginForm({ onNavigateToSignup }: LoginFormProps) {
                   className="pl-10"
                   required
                   disabled={state.isLoading}
+                  aria-invalid={!!formErrors.email}
                 />
               </div>
+              {formErrors.email && (
+                <p className="text-sm text-red-600 mt-1">{formErrors.email}</p>
+              )}
             </div>
 
             <div>
@@ -82,13 +156,31 @@ export function LoginForm({ onNavigateToSignup }: LoginFormProps) {
                   className="pl-10"
                   required
                   disabled={state.isLoading}
+                  aria-invalid={!!formErrors.password}
                 />
               </div>
+              {formErrors.password && (
+                <p className="text-sm text-red-600 mt-1">{formErrors.password}</p>
+              )}
             </div>
 
+            {/* Enhanced Error Display */}
             {state.error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm text-red-800">{state.error}</p>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm text-red-800 font-medium mb-1">Login Failed</p>
+                    <p className="text-sm text-red-700">{state.error}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearError}
+                    className="ml-2 text-red-400 hover:text-red-600 transition-colors"
+                    disabled={state.isLoading}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -119,22 +211,41 @@ export function LoginForm({ onNavigateToSignup }: LoginFormProps) {
 
           <div className="space-y-2">
             <p className="text-xs text-gray-600 text-center mb-3">
-              Try with demo accounts:
+              🚀 Quick Login - नेपाली Demo Accounts (7 users):
             </p>
-            {demoCredentials.map((cred) => (
-              <Button
-                key={cred.email}
-                variant="outline"
-                className="w-full justify-between text-sm"
-                onClick={() => handleDemoLogin(cred)}
-                disabled={state.isLoading}
-              >
-                <span>{cred.email}</span>
-                <Badge variant="secondary" className="text-xs">
-                  {cred.role}
-                </Badge>
-              </Button>
-            ))}
+            <div className="max-h-48 overflow-y-auto space-y-2">
+              {demoCredentials.map((cred) => (
+                <Button
+                  key={cred.email}
+                  variant="outline"
+                  className="w-full justify-between text-sm hover:bg-blue-50 transition-colors"
+                  onClick={() => handleDemoLogin(cred)}
+                  disabled={state.isLoading}
+                >
+                  <div className="flex flex-col items-start flex-1 min-w-0">
+                    <span className="font-medium text-left truncate">{cred.label}</span>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className="truncate">{cred.email}</span>
+                      {cred.location && (
+                        <>
+                          <span>•</span>
+                          <span className="text-orange-600 font-medium">{cred.location}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <Badge 
+                    variant={cred.role === 'ADMIN' ? 'destructive' : cred.role === 'AGENT' ? 'default' : 'secondary'} 
+                    className="text-xs ml-2 flex-shrink-0"
+                  >
+                    {cred.role}
+                  </Badge>
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 text-center mt-2">
+              All passwords: <code className="bg-gray-100 px-1 rounded">password123</code>
+            </p>
           </div>
 
           <div className="text-center">

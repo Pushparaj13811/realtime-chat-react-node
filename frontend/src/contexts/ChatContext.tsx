@@ -9,9 +9,12 @@ import type {
   MessageType,
   CreateChatRoomRequest
 } from '../types';
+import { UserRole } from '../types';
 import { useAuth } from './AuthContext';
 import apiService from '../services/api';
 import socketService from '../services/socket';
+import notificationService from '../services/notification';
+import { useToast } from '../components/ui/toast';
 
 type ChatAction =
   | { type: 'SET_LOADING'; payload: boolean }
@@ -29,6 +32,9 @@ type ChatAction =
   | { type: 'SET_ONLINE_USERS'; payload: SocketUser[] }
   | { type: 'SET_ONLINE_AGENTS'; payload: User[] }
   | { type: 'SET_UNREAD_COUNT'; payload: { chatRoomId: string; count: number } }
+  | { type: 'SET_ALL_UNREAD_COUNTS'; payload: { [chatRoomId: string]: number } }
+  | { type: 'INCREMENT_UNREAD_COUNT'; payload: { chatRoomId: string } }
+  | { type: 'DECREMENT_UNREAD_COUNT'; payload: { chatRoomId: string } }
   | { type: 'SET_CONNECTION_STATUS'; payload: boolean }
   | { type: 'CLEAR_CHAT_DATA' };
 
@@ -123,6 +129,14 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const roomTypingUsers = state.typingUsers[action.payload.chatRoomId] || [];
       const existingUser = roomTypingUsers.find(u => u.userId === action.payload.userId);
       
+      console.log('⌨️ Reducer: ADD_TYPING_USER:', {
+        chatRoomId: action.payload.chatRoomId,
+        userId: action.payload.userId,
+        username: action.payload.username,
+        existingUser: !!existingUser,
+        currentTypingUsers: roomTypingUsers.map(u => u.username)
+      });
+      
       if (existingUser) {
         return {
           ...state,
@@ -135,18 +149,28 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         };
       }
 
+      const newTypingUsers = [...roomTypingUsers, action.payload];
+      console.log('⌨️ Reducer: New typing users list:', newTypingUsers.map(u => u.username));
+      
       return {
         ...state,
         typingUsers: {
           ...state.typingUsers,
-          [action.payload.chatRoomId]: [...roomTypingUsers, action.payload]
+          [action.payload.chatRoomId]: newTypingUsers
         }
       };
     }
 
     case 'REMOVE_TYPING_USER': {
-      const filteredUsers = (state.typingUsers[action.payload.chatRoomId] || [])
-        .filter(u => u.userId !== action.payload.userId);
+      const currentTypingUsers = state.typingUsers[action.payload.chatRoomId] || [];
+      const filteredUsers = currentTypingUsers.filter(u => u.userId !== action.payload.userId);
+      
+      console.log('⌨️ Reducer: REMOVE_TYPING_USER:', {
+        chatRoomId: action.payload.chatRoomId,
+        userId: action.payload.userId,
+        before: currentTypingUsers.map(u => u.username),
+        after: filteredUsers.map(u => u.username)
+      });
       
       return {
         ...state,
@@ -172,6 +196,35 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }
       };
 
+    case 'SET_ALL_UNREAD_COUNTS':
+      return {
+        ...state,
+        unreadCounts: action.payload
+      };
+
+    case 'INCREMENT_UNREAD_COUNT': {
+      const currentCount = state.unreadCounts[action.payload.chatRoomId] || 0;
+      return {
+        ...state,
+        unreadCounts: {
+          ...state.unreadCounts,
+          [action.payload.chatRoomId]: currentCount + 1
+        }
+      };
+    }
+
+    case 'DECREMENT_UNREAD_COUNT': {
+      const currentCount = state.unreadCounts[action.payload.chatRoomId] || 0;
+      const newCount = Math.max(0, currentCount - 1);
+      return {
+        ...state,
+        unreadCounts: {
+          ...state.unreadCounts,
+          [action.payload.chatRoomId]: newCount
+        }
+      };
+    }
+
     case 'SET_CONNECTION_STATUS':
       return { ...state, isConnected: action.payload };
 
@@ -193,6 +246,7 @@ interface ChatContextType {
   sendTyping: (isTyping: boolean) => void;
   markMessageAsRead: (messageId: string) => void;
   refreshChatRooms: () => Promise<void>;
+  refreshUnreadCounts: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -205,6 +259,7 @@ interface ChatProviderProps {
 export function ChatProvider({ children }: ChatProviderProps) {
   const [state, dispatch] = useReducer(chatReducer, initialState);
   const { state: authState } = useAuth();
+  const { addToast } = useToast();
 
   // Setup socket event listeners
   useEffect(() => {
@@ -254,6 +309,40 @@ export function ChatProvider({ children }: ChatProviderProps) {
     // Message events
     socketService.on('new-message', (data) => {
       dispatch({ type: 'ADD_MESSAGE', payload: data.message });
+      
+      // Handle notifications for inactive users
+      const isMessageFromCurrentUser = data.sender.id === authState.user?.userId;
+      const currentUserId = authState.user?.userId;
+      
+      if (!isMessageFromCurrentUser && currentUserId) {
+        // Check if the current user is a participant in this chat room
+        const chatRoom = state.chatRooms.find(room => room._id === data.message.chatRoomId);
+        
+        if (chatRoom) {
+          const isParticipant = chatRoom.participants.some(p => p._id === currentUserId);
+          const isAssignedAgent = chatRoom.assignedAgent?._id === currentUserId;
+          
+          // Only increment unread count if user is actually involved in this chat
+          if (isParticipant || isAssignedAgent) {
+            // Don't increment for admins as per privacy requirements
+            if (authState.user?.role !== 'admin') {
+              dispatch({ type: 'INCREMENT_UNREAD_COUNT', payload: { chatRoomId: data.message.chatRoomId } });
+            }
+            
+            if (data.message.chatRoomId !== state.currentChatRoom?._id) {
+              // User is not viewing this chat room - show notification
+              notificationService.showNewMessageNotification(
+                data.sender.username,
+                data.message.content,
+                chatRoom.name
+              );
+            }
+            
+            // Mark message as delivered immediately when received
+            socketService.markMessageDelivered(data.message._id);
+          }
+        }
+      }
     });
 
     socketService.on('message-status-updated', (data) => {
@@ -272,9 +361,12 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
     // Typing events
     socketService.on('user-typing', (data) => {
+      console.log('⌨️ ChatContext: Received typing event:', data);
       if (data.isTyping) {
+        console.log('⌨️ ChatContext: Adding typing user:', data.userId);
         dispatch({ type: 'ADD_TYPING_USER', payload: data });
       } else {
+        console.log('⌨️ ChatContext: Removing typing user:', data.userId);
         dispatch({ 
           type: 'REMOVE_TYPING_USER', 
           payload: { 
@@ -302,6 +394,105 @@ export function ChatProvider({ children }: ChatProviderProps) {
       }, 500);
     });
 
+    // Agent assignment events
+    socketService.on('agent-removed', (data) => {
+      console.log('🚨 ChatContext: Agent removed from chat room:', data);
+      // Refresh chat rooms to update the UI
+      refreshChatRooms();
+      
+      // If this affects the current chat room, notify user
+      if (state.currentChatRoom?._id === data.chatRoomId) {
+        console.log('⚠️ Current chat room affected by agent removal');
+      }
+    });
+
+    socketService.on('agent-assignment-removed', (data) => {
+      console.log('🚨 ChatContext: Agent assignment removed for current user:', data);
+      
+      // If this is the current chat room, leave it immediately
+      if (state.currentChatRoom?._id === data.chatRoomId) {
+        dispatch({ type: 'SET_CURRENT_CHAT_ROOM', payload: null });
+      }
+      
+      // Show persistent toast notification
+      const chatRoomShortId = data.chatRoomId.slice(-6);
+      addToast({
+        type: 'error',
+        title: 'Agent Assignment Removed',
+        message: `You have been removed from Support Chat #${chatRoomShortId}. Reason: ${data.reason}`,
+        duration: 10000, // 10 seconds
+        persistent: false
+      });
+      
+      // Refresh chat rooms to update the UI
+      setTimeout(() => {
+        refreshChatRooms();
+      }, 500);
+    });
+
+    socketService.on('agent-assignment-received', (data) => {
+      console.log('✅ ChatContext: Agent assignment received:', data);
+      
+      // Show success notification for new assignment
+      addToast({
+        type: 'success',
+        title: 'New Chat Assignment',
+        message: `You have been assigned to a new support chat room.`,
+        duration: 5000
+      });
+      
+      // Refresh chat rooms to show new assignment
+      refreshChatRooms();
+    });
+
+    // Listen for general room updates that affect all users/admins
+    socketService.on('chat-room-updated', (data) => {
+      console.log('🔄 ChatContext: Chat room updated:', data);
+      
+      // Update specific chat room in state immediately for faster UI updates
+      if (data.chatRoom) {
+        dispatch({ type: 'UPDATE_CHAT_ROOM', payload: data.chatRoom as ChatRoom });
+        
+        // Check if the current user is newly assigned as agent
+        const currentUserId = authState.user?.userId;
+        const chatRoom = data.chatRoom as ChatRoom;
+        const assignedAgentId = chatRoom.assignedAgent?._id;
+        
+        if (data.action === 'agent-assigned' && assignedAgentId === currentUserId) {
+          console.log('✅ ChatContext: Current user assigned to new chat room:', chatRoom._id);
+          addToast({
+            type: 'success',
+            title: 'New Chat Assignment',
+            message: `You have been assigned to chat room #${chatRoom._id.slice(-6)}`,
+            duration: 5000
+          });
+          
+          // Join the socket room immediately
+          socketService.joinRoom(chatRoom._id);
+        }
+        
+        // Check if current user was removed as agent
+        if (data.action === 'agent-removed' && state.currentChatRoom?._id === chatRoom._id) {
+          const isCurrentUserAssigned = chatRoom.assignedAgent?._id === currentUserId;
+          if (!isCurrentUserAssigned && authState.user?.role === UserRole.AGENT) {
+            console.log('🚨 ChatContext: Current user removed from current chat room');
+            dispatch({ type: 'SET_CURRENT_CHAT_ROOM', payload: null });
+            addToast({
+              type: 'warning',
+              title: 'Chat Assignment Removed',
+              message: `You have been removed from chat room #${chatRoom._id.slice(-6)}`,
+              duration: 5000
+            });
+          }
+        }
+      }
+      
+      // Refresh all chat rooms to ensure consistency and show new rooms
+      setTimeout(() => {
+        refreshChatRooms();
+      }, 500);
+    });
+
     // Periodic refresh of online users (every 30 seconds)
     const refreshInterval = setInterval(() => {
       if (socketService.isConnected()) {
@@ -313,6 +504,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
     // Initial data fetch
     if (socketService.isConnected()) {
       refreshChatRooms();
+      refreshUnreadCounts();
       socketService.getOnlineUsers();
       socketService.getOnlineAgents();
     }
@@ -329,6 +521,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
       socketService.off('online-users');
       socketService.off('online-agents');
       socketService.off('user-status-changed');
+      socketService.off('agent-removed');
+      socketService.off('agent-assignment-removed');
+      socketService.off('agent-assignment-received');
+      socketService.off('chat-room-updated');
     };
   }, [authState.isAuthenticated]);
 
@@ -336,6 +532,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   useEffect(() => {
     if (authState.isAuthenticated) {
       refreshChatRooms();
+      refreshUnreadCounts();
     }
   }, [authState.isAuthenticated]);
 
@@ -439,10 +636,19 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
   const sendTyping = (isTyping: boolean) => {
     if (!state.currentChatRoom) return;
+    console.log('⌨️ ChatContext: Sending typing indicator:', { 
+      chatRoomId: state.currentChatRoom._id, 
+      isTyping,
+      user: authState.user?.username 
+    });
     socketService.sendTyping(state.currentChatRoom._id, isTyping);
   };
 
   const markMessageAsRead = (messageId: string) => {
+    if (state.currentChatRoom) {
+      // Decrement unread count for current chat room
+      dispatch({ type: 'DECREMENT_UNREAD_COUNT', payload: { chatRoomId: state.currentChatRoom._id } });
+    }
     socketService.markMessageRead(messageId);
   };
 
@@ -467,6 +673,25 @@ export function ChatProvider({ children }: ChatProviderProps) {
     }
   };
 
+  const refreshUnreadCounts = async () => {
+    try {
+      if (!authState.isAuthenticated) return;
+
+      const response = await apiService.getUnreadCount();
+      if (response.success && response.data) {
+        const data = response.data as { total?: number; perRoom?: { [key: string]: number } };
+        const perRoom = data.perRoom || {};
+        
+        // Update all unread counts in the state
+        dispatch({ type: 'SET_ALL_UNREAD_COUNTS', payload: perRoom });
+        
+        console.log('✅ Unread counts refreshed:', perRoom);
+      }
+    } catch (error) {
+      console.error('Failed to refresh unread counts:', error);
+    }
+  };
+
   const clearError = () => {
     dispatch({ type: 'SET_ERROR', payload: null });
   };
@@ -483,6 +708,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
         sendTyping,
         markMessageAsRead,
         refreshChatRooms,
+        refreshUnreadCounts,
         clearError,
       }}
     >

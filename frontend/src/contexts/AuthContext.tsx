@@ -196,9 +196,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error) {
       console.error('❌ Login error:', error);
       let errorMessage = 'Login failed';
+      
+      // Extract error message from the enhanced error
       if (error instanceof Error) {
         errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as { message: string }).message;
       }
+      
       dispatch({ type: 'AUTH_ERROR', payload: errorMessage });
     }
   };
@@ -217,23 +222,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } catch (error: unknown) {
       console.error('Registration error:', error);
       
-      // Handle different types of errors
       let errorMessage = 'Registration failed';
       
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { data?: { message?: string; error?: string } } };
-        if (axiosError.response?.data?.message) {
-          // Server returned a specific error message
-          errorMessage = axiosError.response.data.message;
-        } else if (axiosError.response?.data?.error) {
-          // Alternative error format
-          errorMessage = axiosError.response.data.error;
-        }
-      } else if (error instanceof Error) {
-        // General error message
+      // Extract error message from the enhanced error
+      if (error instanceof Error) {
         errorMessage = error.message;
-      } else if (typeof error === 'string') {
-        errorMessage = error;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = (error as { message: string }).message;
       }
       
       dispatch({ 
