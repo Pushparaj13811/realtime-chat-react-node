@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,9 @@ import {
   UserPlus,
   Loader2,
   AlertCircle,
-  Plus
+  Plus,
+  ArrowLeft,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AgentRegistrationForm } from '@/components/auth/AgentRegistrationForm';
@@ -18,8 +21,22 @@ import type { User } from '@/types';
 import { UserRole, UserStatus } from '@/types';
 import apiService from '@/services/api';
 
+type AdminTab = 'dashboard' | 'users' | 'create-agent';
+
 export function AdminPanel() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'create-agent'>('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { state } = useAuth();
+
+  // Determine active tab from URL
+  const getActiveTabFromPath = (): AdminTab => {
+    const path = location.pathname;
+    if (path.includes('/users')) return 'users';
+    if (path.includes('/create-agent')) return 'create-agent';
+    return 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState<AdminTab>(getActiveTabFromPath());
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeAgents: 0,
@@ -29,8 +46,30 @@ export function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const { state } = useAuth();
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    setActiveTab(getActiveTabFromPath());
+  }, [location.pathname]);
+
+  // Handle tab navigation
+  const handleTabChange = (tab: AdminTab) => {
+    setActiveTab(tab);
+    switch (tab) {
+      case 'dashboard':
+        navigate('/admin/dashboard');
+        break;
+      case 'users':
+        navigate('/admin/users');
+        break;
+      case 'create-agent':
+        navigate('/admin/create-agent');
+        break;
+
+      default:
+        navigate('/admin');
+    }
+  };
 
   // Fetch dashboard data
   useEffect(() => {
@@ -108,6 +147,10 @@ export function AdminPanel() {
     );
   }
 
+  if (activeTab === 'create-agent') {
+    return <AgentRegistrationForm adminSessionId={state.user?.sessionId} onBack={() => setActiveTab('dashboard')} />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -115,6 +158,15 @@ export function AdminPanel() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => navigate('/chat')}
+                className="mr-2"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back to Chat
+              </Button>
               <Shield className="h-8 w-8 text-purple-600" />
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Admin Panel</h1>
@@ -122,6 +174,14 @@ export function AdminPanel() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => navigate('/admin/agents')}
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                Agent Management
+              </Button>
               <Badge variant="outline" className="text-purple-700">
                 <Shield className="h-3 w-3 mr-1" />
                 Admin
@@ -136,7 +196,7 @@ export function AdminPanel() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
             <button
-              onClick={() => setActiveTab('dashboard')}
+              onClick={() => handleTabChange('dashboard')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'dashboard'
                   ? 'border-purple-500 text-purple-600'
@@ -147,7 +207,7 @@ export function AdminPanel() {
               Dashboard
             </button>
             <button
-              onClick={() => setActiveTab('users')}
+              onClick={() => handleTabChange('users')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'users'
                   ? 'border-purple-500 text-purple-600'
@@ -158,9 +218,9 @@ export function AdminPanel() {
               Users
             </button>
             <button
-              onClick={() => setActiveTab('create-agent')}
+              onClick={() => handleTabChange('create-agent')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'create-agent'
+                activeTab === ('create-agent' as AdminTab)
                   ? 'border-purple-500 text-purple-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
@@ -297,16 +357,7 @@ export function AdminPanel() {
           </Card>
         )}
 
-        {activeTab === 'create-agent' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Create New Agent</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AgentRegistrationForm adminSessionId={state.user?.sessionId} />
-            </CardContent>
-          </Card>
-        )}
+
 
         {/* Users Management */}
         <div className="space-y-4">

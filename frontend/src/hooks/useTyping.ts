@@ -12,6 +12,8 @@ export function useTyping(options: UseTypingOptions = {}) {
   const isTypingRef = useRef(false);
 
   const startTyping = useCallback(() => {
+    console.log('⌨️ useTyping: startTyping called, current state:', isTypingRef.current);
+    
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -19,12 +21,14 @@ export function useTyping(options: UseTypingOptions = {}) {
 
     // Send typing indicator if not already typing
     if (!isTypingRef.current) {
+      console.log('⌨️ useTyping: Starting typing indicator');
       sendTyping(true);
       isTypingRef.current = true;
     }
 
     // Set timeout to stop typing indicator
     typingTimeoutRef.current = setTimeout(() => {
+      console.log('⌨️ useTyping: Auto-stopping typing indicator after delay');
       sendTyping(false);
       isTypingRef.current = false;
       typingTimeoutRef.current = null;
@@ -32,12 +36,15 @@ export function useTyping(options: UseTypingOptions = {}) {
   }, [sendTyping, delay]);
 
   const stopTyping = useCallback(() => {
+    console.log('⌨️ useTyping: stopTyping called, current state:', isTypingRef.current);
+    
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
     }
 
     if (isTypingRef.current) {
+      console.log('⌨️ useTyping: Manually stopping typing indicator');
       sendTyping(false);
       isTypingRef.current = false;
     }
