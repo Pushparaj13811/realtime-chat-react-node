@@ -736,43 +736,59 @@ export class SocketService implements ISocketService {
     }
   }
 
-  // Check if user can send messages in a chat room (for support chat restrictions)
+  // Check if user can send messages in a chat room (enhanced agent access control)
   private async checkMessagingPermissions(user: AuthSession, chatRoomId: string): Promise<boolean> {
     try {
       // Get the chat room
-      const chatRoom = await ChatRoom.findById(chatRoomId).populate('assignedAgent');
+      const chatRoom = await ChatRoom.findById(chatRoomId).populate('assignedAgent participants');
 
       if (!chatRoom) {
         return false;
       }
 
-      // For non-support rooms, allow all participants to message
-      if (chatRoom.type !== 'support') {
-        return true;
-      }
-
-      // For support rooms, check if there are any existing messages
-      // Import Message model for direct query
-      const { Message } = await import('../models/Message.js');
-      const messageCount = await Message.countDocuments({ chatRoomId });
-      
-      console.log(`🔍 SocketService: Checking messaging permissions for support room ${chatRoomId}:`, {
-        messageCount,
+      console.log(`🔍 SocketService: Checking messaging permissions for room ${chatRoomId}:`, {
         userRole: user.role,
         userId: user.userId,
-        assignedAgentId: this.extractId(chatRoom.assignedAgent)
+        roomType: chatRoom.type,
+        assignedAgentId: this.extractId(chatRoom.assignedAgent),
+        isParticipant: chatRoom.participants.some(p => this.extractId(p) === user.userId)
       });
 
-      // If there are already messages in the room, anyone can participate
-      if (messageCount > 0) {
-        return true;
-      }
-
-      // For empty support rooms (first message), only the assigned agent can initiate
+      // Check if user is a participant in the chat room
+      const isParticipant = chatRoom.participants.some(p => this.extractId(p) === user.userId);
       const isAssignedAgent = this.extractId(chatRoom.assignedAgent) === user.userId;
       const isAdmin = user.role === 'admin';
 
-      return isAssignedAgent || isAdmin;
+      // For non-support rooms, only participants can message
+      if (chatRoom.type !== 'support') {
+        return isParticipant || isAdmin;
+      }
+
+      // For support rooms, enhanced access control:
+      // 1. If user is a regular participant (customer), they can always message
+      if (isParticipant && user.role === 'user') {
+        return true;
+      }
+
+      // 2. If user is the assigned agent, they can always message
+      if (isAssignedAgent) {
+        return true;
+      }
+
+      // 3. If user is an admin, they can always message
+      if (isAdmin) {
+        return true;
+      }
+
+      // 4. If user is an agent but NOT assigned to this room, deny access
+      if (user.role === 'agent' && !isAssignedAgent) {
+        console.log(`❌ SocketService: Agent ${user.username} denied access to room ${chatRoomId} - not assigned`);
+        return false;
+      }
+
+      // 5. For all other cases, deny access
+      console.log(`❌ SocketService: User ${user.username} denied access to room ${chatRoomId} - insufficient permissions`);
+      return false;
     } catch (error) {
       console.error('Check messaging permissions error:', error);
       return false;

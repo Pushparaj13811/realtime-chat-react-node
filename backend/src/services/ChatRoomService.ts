@@ -298,19 +298,33 @@ export class ChatRoomService {
 
     const previousAgent = chatRoom.assignedAgent;
 
-    // Update chat room
-    await ChatRoom.findByIdAndUpdate(chatRoomId, {
+    // Update chat room and participant list
+    const updateData: any = {
       assignedAgent: new mongoose.Types.ObjectId(agentId),
       status: ChatRoomStatus.ACTIVE,
-      $push: previousAgent ? {
+      $addToSet: {
+        participants: new mongoose.Types.ObjectId(agentId)
+      }
+    };
+
+    // Add transfer history if there was a previous agent
+    if (previousAgent) {
+      updateData.$push = {
         transferHistory: {
           fromAgent: previousAgent,
           toAgent: new mongoose.Types.ObjectId(agentId),
           transferredAt: new Date(),
           reason
         }
-      } : undefined
-    });
+      };
+      
+      // Remove previous agent from participants
+      updateData.$pull = {
+        participants: previousAgent
+      };
+    }
+
+    await ChatRoom.findByIdAndUpdate(chatRoomId, updateData);
 
     // Update agent's assigned chats
     await User.findByIdAndUpdate(agentId, {
@@ -528,7 +542,7 @@ export class ChatRoomService {
       // Find a new agent for this chat
       const newAgentId = await this.findAvailableAgent();
 
-      // Update chat room with new agent
+      // Update chat room with new agent and handle participant changes
       const updateData: any = {
         $push: {
           transferHistory: {
@@ -537,12 +551,20 @@ export class ChatRoomService {
             transferredAt: new Date(),
             reason: reason || 'Admin removal'
           }
+        },
+        // Remove previous agent from participants
+        $pull: {
+          participants: new mongoose.Types.ObjectId(previousAgentId)
         }
       };
 
       if (newAgentId) {
         updateData.assignedAgent = new mongoose.Types.ObjectId(newAgentId);
         updateData.status = ChatRoomStatus.ACTIVE;
+        // Add new agent to participants
+        updateData.$addToSet = {
+          participants: new mongoose.Types.ObjectId(newAgentId)
+        };
       } else {
         updateData.assignedAgent = null;
         updateData.status = ChatRoomStatus.PENDING;
