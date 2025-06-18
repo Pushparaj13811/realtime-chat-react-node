@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { ChatRoomService } from '../services/ChatRoomService.js';
 import { MessageService } from '../services/MessageService.js';
-import { ChatRoomType, ChatRoomStatus } from '../models/ChatRoom.js';
+import { ChatRoom, ChatRoomType, ChatRoomStatus } from '../models/ChatRoom.js';
 import { UserRole } from '../models/User.js';
 import { AuthService } from '../services/AuthService.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
@@ -424,6 +424,27 @@ export class ChatController {
     res.status(200).json(response.toJSON());
   };
 
+  // Admin: Get all chat rooms
+  getAllChatRoomsAdmin = async (req: Request, res: Response): Promise<void> => {
+    const userRole = (req as any).user?.role;
+
+    if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
+      throw new ApiError(403, 'Admin access required');
+    }
+
+    // Get all chat rooms for admin - not limited to user's participation
+    const chatRooms = await ChatRoom.find({ isActive: true })
+      .populate([
+        { path: 'participants', select: 'username email role status isOnline' },
+        { path: 'assignedAgent', select: 'username email role status isOnline' },
+        { path: 'lastMessage', select: 'content messageType createdAt senderId' }
+      ])
+      .sort({ lastActivity: -1 });
+
+    const response = new ApiResponse(200, 'All chat rooms fetched', chatRooms);
+    res.status(200).json(response.toJSON());
+  };
+
   // Admin: Get agent workload statistics
   getAgentWorkloadStats = async (req: Request, res: Response): Promise<void> => {
     const userRole = (req as any).user?.role;
@@ -441,30 +462,52 @@ export class ChatController {
   // Admin: Transfer agent
   transferAgentAdmin = async (req: Request, res: Response): Promise<void> => {
     const userRole = (req as any).user?.role;
-    const { fromChatId, toChatId, agentId, reason } = req.body;
+    const { chatRoomId, agentId, fromChatId, toChatId, reason } = req.body;
 
     if (!this.authService.hasPermission(userRole, UserRole.ADMIN)) {
       throw new ApiError(403, 'Admin access required');
     }
 
-    if (!fromChatId || !toChatId || !agentId) {
-      throw new ApiError(400, 'From chat ID, to chat ID, and agent ID are required');
+    let success = false;
+
+    // Check if this is a transfer between two chats
+    if (fromChatId && toChatId && agentId) {
+      // Transfer agent between chats
+      if (!fromChatId || !toChatId || !agentId) {
+        throw new ApiError(400, 'From chat ID, to chat ID, and agent ID are required for chat-to-chat transfer');
+      }
+
+      success = await this.chatRoomService.transferAgentBetweenChats(
+        fromChatId,
+        toChatId,
+        agentId,
+        (req as any).user?.userId,
+        reason
+      );
+
+      if (!success) {
+        throw new ApiError(400, 'Failed to transfer agent between chats');
+      }
+
+      const response = new ApiResponse(200, 'Agent transferred between chats successfully');
+      res.status(200).json(response.toJSON());
+    } else if (chatRoomId && agentId) {
+      // Single chat room agent assignment/replacement
+      success = await this.chatRoomService.assignAgent({
+        chatRoomId,
+        agentId,
+        reason: reason || 'Admin transfer'
+      });
+
+      if (!success) {
+        throw new ApiError(400, 'Failed to assign agent to chat room');
+      }
+
+      const response = new ApiResponse(200, 'Agent assigned to chat room successfully');
+      res.status(200).json(response.toJSON());
+    } else {
+      throw new ApiError(400, 'Invalid parameters. Either provide (chatRoomId, agentId) for assignment or (fromChatId, toChatId, agentId) for transfer');
     }
-
-    const success = await this.chatRoomService.transferAgentBetweenChats(
-      fromChatId,
-      toChatId,
-      agentId,
-      (req as any).user?.userId,
-      reason
-    );
-
-    if (!success) {
-      throw new ApiError(400, 'Failed to transfer agent');
-    }
-
-    const response = new ApiResponse(200, 'Agent transferred successfully');
-    res.status(200).json(response.toJSON());
   };
 
   // Admin: Assign agent

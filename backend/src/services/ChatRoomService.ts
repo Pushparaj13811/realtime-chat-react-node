@@ -36,6 +36,7 @@ export class ChatRoomService {
   private static instance: ChatRoomService;
   private cacheService: CacheService;
   private authService: AuthService;
+  private io: any; // Socket.IO instance
 
   private constructor() {
     this.cacheService = CacheService.getInstance();
@@ -47,6 +48,25 @@ export class ChatRoomService {
       ChatRoomService.instance = new ChatRoomService();
     }
     return ChatRoomService.instance;
+  }
+
+  // Set Socket.IO instance for real-time notifications
+  setSocketIO(io: any): void {
+    this.io = io;
+  }
+
+  // Emit socket event to specific chat room
+  private emitToChatRoom(chatRoomId: string, event: string, data: any): void {
+    if (this.io) {
+      this.io.to(chatRoomId).emit(event, data);
+    }
+  }
+
+  // Emit socket event to specific user
+  private emitToUser(userId: string, event: string, data: any): void {
+    if (this.io) {
+      this.io.to(`user:${userId}`).emit(event, data);
+    }
   }
 
   // Create a new chat room
@@ -539,6 +559,42 @@ export class ChatRoomService {
         await User.findByIdAndUpdate(newAgentId, {
           $addToSet: { assignedChats: chatRoomId }
         });
+      }
+
+      // Get updated chat room for notifications
+      const updatedRoom = await ChatRoom.findById(chatRoomId)
+        .populate([
+          { path: 'participants', select: 'username email role status isOnline' },
+          { path: 'assignedAgent', select: 'username email role status isOnline' },
+          { path: 'createdBy', select: 'username email role' }
+        ]);
+
+      if (updatedRoom) {
+        // Socket notifications for real-time updates
+        const notificationData = {
+          chatRoomId,
+          removedAgentId: previousAgentId,
+          newAgent: updatedRoom.assignedAgent,
+          reason: reason || 'Admin removal',
+          timestamp: new Date()
+        };
+
+        // Notify all participants in the chat room
+        this.emitToChatRoom(chatRoomId, 'agent-removed', notificationData);
+
+        // Notify the removed agent
+        this.emitToUser(previousAgentId, 'agent-assignment-removed', {
+          chatRoomId,
+          reason: reason || 'Admin removal'
+        });
+
+        // Notify the new agent if there is one
+        if (newAgentId) {
+          this.emitToUser(newAgentId, 'agent-assignment-received', {
+            chatRoom: updatedRoom,
+            reason: 'Auto-assigned after agent removal'
+          });
+        }
       }
 
       console.log(`✅ Agent removed from chat ${chatRoomId}, new agent: ${newAgentId || 'none available'}`);
