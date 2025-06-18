@@ -298,7 +298,14 @@ export class ChatRoomService {
 
     const previousAgent = chatRoom.assignedAgent;
 
-    // Update chat room and participant list
+    // Step 1: Remove previous agent from participants if exists
+    if (previousAgent) {
+      await ChatRoom.findByIdAndUpdate(chatRoomId, {
+        $pull: { participants: previousAgent }
+      });
+    }
+
+    // Step 2: Update main assignment and add new agent to participants
     const updateData: any = {
       assignedAgent: new mongoose.Types.ObjectId(agentId),
       status: ChatRoomStatus.ACTIVE,
@@ -316,11 +323,6 @@ export class ChatRoomService {
           transferredAt: new Date(),
           reason
         }
-      };
-      
-      // Remove previous agent from participants
-      updateData.$pull = {
-        participants: previousAgent
       };
     }
 
@@ -542,7 +544,12 @@ export class ChatRoomService {
       // Find a new agent for this chat
       const newAgentId = await this.findAvailableAgent();
 
-      // Update chat room with new agent and handle participant changes
+      // Step 1: Remove previous agent from participants
+      await ChatRoom.findByIdAndUpdate(chatRoomId, {
+        $pull: { participants: new mongoose.Types.ObjectId(previousAgentId) }
+      });
+
+      // Step 2: Update chat room with new agent and handle participant changes
       const updateData: any = {
         $push: {
           transferHistory: {
@@ -551,10 +558,6 @@ export class ChatRoomService {
             transferredAt: new Date(),
             reason: reason || 'Admin removal'
           }
-        },
-        // Remove previous agent from participants
-        $pull: {
-          participants: new mongoose.Types.ObjectId(previousAgentId)
         }
       };
 
