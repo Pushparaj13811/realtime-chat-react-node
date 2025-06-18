@@ -2,10 +2,11 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageCircle, Users, HeadphonesIcon } from 'lucide-react';
+import { MessageCircle, Users, HeadphonesIcon, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
-import type { ChatRoom, ChatRoomType } from '@/types';
+import type { ChatRoom } from '@/types';
+import { ChatRoomType } from '@/types';
 import { useUnreadCount } from '@/hooks/useUnreadCount';
 
 interface ChatRoomListProps {
@@ -90,9 +91,10 @@ export function ChatRoomList({
   }
 
   return (
-    <ScrollArea className={cn("h-full", className)}>
-      <div className="space-y-2 p-4">
-        {chatRooms.map((room) => {
+    <div className={cn("h-full w-full", className)}>
+      <ScrollArea className="h-full w-full">
+        <div className="space-y-3 p-3 pb-6">
+          {chatRooms.map((room) => {
           const unreadCount = getUnreadCount(room._id);
           const isSelected = currentChatRoomId === room._id;
           const isActive = isRoomActive(room);
@@ -101,60 +103,92 @@ export function ChatRoomList({
             <Card
               key={room._id}
               className={cn(
-                "p-4 cursor-pointer transition-all duration-200 hover:shadow-md",
-                isSelected ? "bg-blue-50 border-blue-200" : "hover:bg-gray-50",
-                unreadCount > 0 && !isSelected && "border-blue-100 bg-blue-25"
+                "p-3 cursor-pointer transition-all duration-200 hover:shadow-lg border w-full",
+                isSelected 
+                  ? "bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-200" 
+                  : "hover:bg-white border-gray-200 bg-white/80 backdrop-blur-sm",
+                unreadCount > 0 && !isSelected && "border-blue-200 bg-blue-50/50 shadow-sm"
               )}
               onClick={() => onSelectChatRoom(room)}
             >
-              <div className="flex items-start gap-3">
-                <div className="relative">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback>
+              <div className="flex items-start gap-3 w-full">
+                <div className="relative flex-shrink-0">
+                  <Avatar className={cn(
+                    "h-10 w-10 transition-all duration-200",
+                    isSelected && "ring-2 ring-blue-500 ring-offset-2"
+                  )}>
+                    <AvatarFallback className={cn(
+                      "text-white font-medium",
+                      room.type === 'support' && "bg-green-500",
+                      room.type === 'direct' && "bg-blue-500", 
+                      room.type === 'group' && "bg-purple-500"
+                    )}>
                       {getRoomIcon(room.type)}
                     </AvatarFallback>
                   </Avatar>
                   {isActive && (
-                    <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-green-500 border-2 border-white rounded-full"></div>
+                    <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 border-2 border-white rounded-full shadow-sm">
+                      <div className="h-full w-full bg-green-400 rounded-full animate-pulse"></div>
+                    </div>
                   )}
                 </div>
                 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
                     <h3 className={cn(
-                      "font-medium text-sm truncate",
-                      unreadCount > 0 ? "text-gray-900" : "text-gray-700"
+                      "font-semibold text-sm leading-tight flex-1",
+                      unreadCount > 0 ? "text-gray-900" : "text-gray-700",
+                      isSelected && "text-blue-900"
                     )}>
                       {getRoomName(room)}
                     </h3>
                     
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {unreadCount > 0 && (
-                        <Badge variant="default" className="bg-blue-500 text-white text-xs px-1.5 py-0.5">
+                        <Badge variant="default" className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-2 py-1 shadow-sm">
                           {unreadCount > 99 ? '99+' : unreadCount}
                         </Badge>
                       )}
-                      <span className="text-xs text-gray-500">
+                      <span className={cn(
+                        "text-xs font-medium whitespace-nowrap",
+                        isSelected ? "text-blue-600" : "text-gray-500"
+                      )}>
                         {getLastActivityTime(room)}
                       </span>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
-                    <p className={cn(
-                      "text-xs truncate flex-1",
-                      unreadCount > 0 ? "text-gray-900 font-medium" : "text-gray-500"
-                    )}>
-                      {getLastMessagePreview(room)}
-                    </p>
-                  </div>
+                  <p className={cn(
+                    "text-xs leading-relaxed max-h-8 overflow-hidden",
+                    unreadCount > 0 ? "text-gray-800 font-medium" : "text-gray-600",
+                    isSelected && "text-gray-700"
+                  )}
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical' as const,
+                    overflow: 'hidden'
+                  }}>
+                    {getLastMessagePreview(room)}
+                  </p>
                   
-                  {room.assignedAgent && (
-                    <div className="flex items-center gap-1 mt-2">
-                      <HeadphonesIcon className="h-3 w-3 text-gray-400" />
-                      <span className="text-xs text-gray-500">
-                        Agent: {room.assignedAgent.username}
-                      </span>
+                  {room.type === ('SUPPORT' as ChatRoomType) && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-md w-fit">
+                      {room.assignedAgent ? (
+                        <>
+                          <HeadphonesIcon className="h-3 w-3 text-green-600 flex-shrink-0" />
+                          <span className="text-xs text-gray-700 font-medium truncate bg-gray-100 px-1 rounded">
+                            {room.assignedAgent.username}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-3 w-3 text-orange-500 flex-shrink-0" />
+                          <span className="text-xs text-orange-700 font-medium bg-orange-100 px-1 rounded">
+                            No Agent
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -162,7 +196,8 @@ export function ChatRoomList({
             </Card>
           );
         })}
-      </div>
-    </ScrollArea>
+        </div>
+      </ScrollArea>
+    </div>
   );
 } 

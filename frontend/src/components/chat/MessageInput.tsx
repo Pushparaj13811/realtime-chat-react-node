@@ -28,19 +28,16 @@ export function MessageInput({
     const value = e.target.value;
     setMessage(value);
     
+    console.log('⌨️ MessageInput: Input changed, value:', value.length > 0 ? `${value.length} chars` : 'empty');
+    
     if (value.trim()) {
+      console.log('⌨️ MessageInput: Starting typing indicator');
       startTyping();
     } else {
+      console.log('⌨️ MessageInput: Stopping typing indicator (empty input)');
       stopTyping();
     }
   }, [startTyping, stopTyping]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [isComposing]);
 
   const handleSend = useCallback(() => {
     const trimmedMessage = message.trim();
@@ -55,6 +52,13 @@ export function MessageInput({
       }
     }
   }, [message, disabled, onSendMessage, stopTyping]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [isComposing, handleSend]);
 
   const handleCompositionStart = () => {
     setIsComposing(true);

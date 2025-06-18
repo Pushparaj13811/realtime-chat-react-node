@@ -13,111 +13,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   Plus, 
   MessageSquare, 
-  Building, 
-  AlertTriangle, 
   Flag,
   Loader2
 } from 'lucide-react';
 import { useChat } from '@/contexts/ChatContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { ChatRoomType, Department, ProblemType } from '@/types';
+import { ChatRoomType } from '@/types';
 
 interface StartChatDialogProps {
   trigger?: React.ReactNode;
   onChatStarted?: () => void;
 }
 
-const departmentLabels: Record<Department, string> = {
-  [Department.TECHNICAL_SUPPORT]: 'Technical Support',
-  [Department.BILLING]: 'Billing & Payments',
-  [Department.SALES]: 'Sales & Pricing',
-  [Department.GENERAL_SUPPORT]: 'General Support',
-  [Department.ACCOUNT_MANAGEMENT]: 'Account Management',
-  [Department.UNKNOWN]: 'Not Sure',
-  [Department.OTHER]: 'Other'
-};
-
-const problemTypeLabels: Record<ProblemType, string> = {
-  // Technical Support
-  [ProblemType.TECHNICAL_ISSUE]: 'Technical Issue',
-  [ProblemType.BUG_REPORT]: 'Bug Report',
-  [ProblemType.FEATURE_REQUEST]: 'Feature Request',
-  [ProblemType.INSTALLATION_HELP]: 'Installation Help',
-  
-  // Billing
-  [ProblemType.PAYMENT_ISSUE]: 'Payment Issue',
-  [ProblemType.REFUND_REQUEST]: 'Refund Request',
-  [ProblemType.BILLING_INQUIRY]: 'Billing Inquiry',
-  [ProblemType.SUBSCRIPTION_CHANGE]: 'Subscription Change',
-  
-  // Sales
-  [ProblemType.PRODUCT_INQUIRY]: 'Product Inquiry',
-  [ProblemType.QUOTE_REQUEST]: 'Quote Request',
-  [ProblemType.DEMO_REQUEST]: 'Demo Request',
-  [ProblemType.PRICING_QUESTION]: 'Pricing Question',
-  
-  // General
-  [ProblemType.GENERAL_QUESTION]: 'General Question',
-  [ProblemType.COMPLAINT]: 'Complaint',
-  [ProblemType.FEEDBACK]: 'Feedback',
-  
-  // Account Management
-  [ProblemType.ACCOUNT_ACCESS]: 'Account Access',
-  [ProblemType.PROFILE_UPDATE]: 'Profile Update',
-  [ProblemType.DATA_REQUEST]: 'Data Request',
-  
-  // Other
-  [ProblemType.OTHER]: 'Other'
-};
-
-const problemTypesByDepartment: Record<Department, ProblemType[]> = {
-  [Department.TECHNICAL_SUPPORT]: [
-    ProblemType.TECHNICAL_ISSUE,
-    ProblemType.BUG_REPORT,
-    ProblemType.FEATURE_REQUEST,
-    ProblemType.INSTALLATION_HELP,
-    ProblemType.OTHER
-  ],
-  [Department.BILLING]: [
-    ProblemType.PAYMENT_ISSUE,
-    ProblemType.REFUND_REQUEST,
-    ProblemType.BILLING_INQUIRY,
-    ProblemType.SUBSCRIPTION_CHANGE,
-    ProblemType.OTHER
-  ],
-  [Department.SALES]: [
-    ProblemType.PRODUCT_INQUIRY,
-    ProblemType.QUOTE_REQUEST,
-    ProblemType.DEMO_REQUEST,
-    ProblemType.PRICING_QUESTION,
-    ProblemType.OTHER
-  ],
-  [Department.GENERAL_SUPPORT]: [
-    ProblemType.GENERAL_QUESTION,
-    ProblemType.COMPLAINT,
-    ProblemType.FEEDBACK,
-    ProblemType.OTHER
-  ],
-  [Department.ACCOUNT_MANAGEMENT]: [
-    ProblemType.ACCOUNT_ACCESS,
-    ProblemType.PROFILE_UPDATE,
-    ProblemType.DATA_REQUEST,
-    ProblemType.OTHER
-  ],
-  [Department.UNKNOWN]: [
-    ProblemType.GENERAL_QUESTION,
-    ProblemType.OTHER
-  ],
-  [Department.OTHER]: [
-    ProblemType.OTHER
-  ]
-};
-
 export function StartChatDialog({ trigger, onChatStarted }: StartChatDialogProps) {
   const [open, setOpen] = useState(false);
   const [subject, setSubject] = useState('');
-  const [department, setDepartment] = useState<Department | ''>('');
-  const [problemType, setProblemType] = useState<ProblemType | ''>('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [isLoading, setIsLoading] = useState(false);
   
@@ -127,7 +37,7 @@ export function StartChatDialog({ trigger, onChatStarted }: StartChatDialogProps
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!subject.trim() || !department || !problemType || !authState.user) {
+    if (!subject.trim() || !authState.user) {
       return;
     }
 
@@ -139,20 +49,12 @@ export function StartChatDialog({ trigger, onChatStarted }: StartChatDialogProps
         participants: [], // Backend will auto-assign appropriate agent
         metadata: {
           subject: subject.trim(),
-          department: department as Department,
-          problemType: problemType as ProblemType,
-          priority,
-          customerInfo: {
-            name: authState.user.username,
-            email: authState.user.email
-          }
+          priority: priority
         }
       });
 
       // Reset form
       setSubject('');
-      setDepartment('');
-      setProblemType('');
       setPriority('medium');
       setOpen(false);
       onChatStarted?.();
@@ -165,13 +67,9 @@ export function StartChatDialog({ trigger, onChatStarted }: StartChatDialogProps
 
   const handleClose = () => {
     setSubject('');
-    setDepartment('');
-    setProblemType('');
     setPriority('medium');
     setOpen(false);
   };
-
-  const availableProblemTypes = department ? problemTypesByDepartment[department as Department] : [];
 
   const defaultTrigger = (
     <Button variant="outline" size="sm">
@@ -185,122 +83,85 @@ export function StartChatDialog({ trigger, onChatStarted }: StartChatDialogProps
       <DialogTrigger asChild>
         {trigger || defaultTrigger}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" />
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="space-y-3 pb-6">
+          <DialogTitle className="flex items-center gap-3 text-xl">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <MessageSquare className="h-6 w-6 text-primary" />
+            </div>
             Start New Support Chat
           </DialogTitle>
-          <DialogDescription>
-            Tell us about your inquiry so we can connect you with the right specialist
+          <DialogDescription className="text-base leading-relaxed">
+            Tell us about your inquiry so we can connect you with the right support agent. 
+            Please provide as much detail as possible to help us assist you better.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Subject/Topic */}
-          <div className="space-y-2">
-            <label htmlFor="subject" className="text-sm font-medium leading-none">
+          <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border/50">
+            <label htmlFor="subject" className="text-base font-semibold leading-none flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" />
               What can we help you with? *
             </label>
             <Textarea
               id="subject"
-              placeholder="Brief description of your issue or question..."
+              placeholder="Please describe your issue or question in detail. The more information you provide, the better we can assist you..."
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="min-h-[80px] resize-none"
+              className="min-h-[100px] resize-none text-base"
               required
             />
           </div>
 
-          {/* Department Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium leading-none flex items-center gap-2">
-              <Building className="h-4 w-4" />
-              Department *
-            </label>
-            <Select 
-              value={department} 
-              onValueChange={(value) => {
-                setDepartment(value as Department);
-                setProblemType(''); // Reset problem type when department changes
-              }}
-              required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select the most relevant department" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(departmentLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Problem Type Selection */}
-          {department && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium leading-none flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Issue Type *
-              </label>
-              <Select 
-                value={problemType} 
-                onValueChange={(value) => setProblemType(value as ProblemType)}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select the type of issue" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableProblemTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {problemTypeLabels[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           {/* Priority Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium leading-none flex items-center gap-2">
-              <Flag className="h-4 w-4" />
+          <div className="space-y-3 p-4 bg-muted/30 rounded-lg border border-border/50">
+            <label className="text-base font-semibold leading-none flex items-center gap-2">
+              <Flag className="h-4 w-4 text-primary" />
               Priority
             </label>
             <Select 
               value={priority} 
               onValueChange={(value) => setPriority(value as 'low' | 'medium' | 'high' | 'urgent')}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-12 text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">
-                  <span className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    Low - General inquiry
+                <SelectItem value="low" className="text-base">
+                  <span className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <div>
+                      <div className="font-medium">Low</div>
+                      <div className="text-xs text-muted-foreground">General inquiry</div>
+                    </div>
                   </span>
                 </SelectItem>
-                <SelectItem value="medium">
-                  <span className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                    Medium - Need assistance
+                <SelectItem value="medium" className="text-base">
+                  <span className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                    <div>
+                      <div className="font-medium">Medium</div>
+                      <div className="text-xs text-muted-foreground">Need assistance</div>
+                    </div>
                   </span>
                 </SelectItem>
-                <SelectItem value="high">
-                  <span className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                    High - Affecting productivity
+                <SelectItem value="high" className="text-base">
+                  <span className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                    <div>
+                      <div className="font-medium">High</div>
+                      <div className="text-xs text-muted-foreground">Affecting productivity</div>
+                    </div>
                   </span>
                 </SelectItem>
-                <SelectItem value="urgent">
-                  <span className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                    Urgent - Critical issue
+                <SelectItem value="urgent" className="text-base">
+                  <span className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                    <div>
+                      <div className="font-medium">Urgent</div>
+                      <div className="text-xs text-muted-foreground">Critical issue</div>
+                    </div>
                   </span>
                 </SelectItem>
               </SelectContent>
@@ -308,37 +169,52 @@ export function StartChatDialog({ trigger, onChatStarted }: StartChatDialogProps
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-4 pt-6 border-t border-border/50">
             <Button
               type="button"
               variant="outline"
               onClick={handleClose}
               disabled={isLoading}
-              className="flex-1"
+              className="flex-1 h-12 text-base"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={isLoading || !subject.trim() || !department || !problemType}
-              className="flex-1"
+              disabled={isLoading || !subject.trim()}
+              className="flex-1 h-12 text-base font-semibold"
+              size="lg"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Creating Chat...
                 </>
               ) : (
-                'Start Chat'
+                <>
+                  <MessageSquare className="h-5 w-5 mr-2" />
+                  Start Chat
+                </>
               )}
             </Button>
           </div>
         </form>
 
         {/* Info Message */}
-        <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-          💡 We'll automatically connect you with a specialist from the selected department. 
-          You can transfer to another department if needed during the conversation.
+        <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-1 bg-blue-100 rounded-full">
+              <MessageSquare className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="text-sm text-blue-800">
+              <p className="font-medium">Quick Start Guide:</p>
+              <ul className="mt-2 space-y-1 text-blue-700">
+                <li>• We'll connect you with an available support agent</li>
+                <li>• You can request a transfer to another agent if needed</li>
+                <li>• Our team typically responds within 2-5 minutes</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
