@@ -476,27 +476,55 @@ export class SocketService implements ISocketService {
   // Handle get online users request
   private async handleGetOnlineUsers(socket: Socket): Promise<void> {
     try {
+      const requestingUser: AuthSession = socket.data.user;
+      
       // Get currently connected users from the socket connections who are also marked as online in database
       const connectedUserIds = Array.from(this.connectedUsers.values()).map(user => user.userId);
       
       // Verify these users are actually online in the database
       const onlineUsers = await User.find({
         _id: { $in: connectedUserIds },
-        isOnline: true
+        isOnline: true,
+        role: UserRole.USER // Only show actual users, not agents or admins
       }).select('_id username role status');
 
-             // Map to SocketUser format
-       const socketUsers = onlineUsers.map(user => {
-         const connectedUser = Array.from(this.connectedUsers.values())
-           .find(cu => cu.userId === (user._id as any).toString());
-         
-         return {
-           userId: (user._id as any).toString(),
-           username: user.username,
-           role: user.role,
-           socketId: connectedUser?.socketId || ''
-         };
-       });
+      let filteredUsers = onlineUsers;
+
+      // Apply role-based filtering
+      if (requestingUser.role === UserRole.USER) {
+        // Users can only see agents they are chatting with
+        const userChatRooms = await this.chatRoomService.getUserChatRooms(requestingUser.userId);
+        const agentIds = userChatRooms
+          .map(room => this.extractId(room.assignedAgent))
+          .filter(id => id);
+        
+        // Users see no other users, only their assigned agents (handled in handleGetOnlineAgents)
+        filteredUsers = [];
+      } else if (requestingUser.role === UserRole.AGENT) {
+        // Agents can only see users they are assigned to
+        const agentChatRooms = await this.chatRoomService.getAgentChatRooms(requestingUser.userId);
+        const participantIds = agentChatRooms
+          .flatMap(room => room.participants.map(p => this.extractId(p)))
+          .filter(id => id);
+        
+        filteredUsers = onlineUsers.filter(user => 
+          participantIds.includes((user._id as any).toString())
+        );
+      }
+      // Admins can see all users (no filtering needed)
+
+      // Map to SocketUser format
+      const socketUsers = filteredUsers.map(user => {
+        const connectedUser = Array.from(this.connectedUsers.values())
+          .find(cu => cu.userId === (user._id as any).toString());
+        
+        return {
+          userId: (user._id as any).toString(),
+          username: user.username,
+          role: user.role,
+          socketId: connectedUser?.socketId || ''
+        };
+      });
       
       socket.emit('online-users', socketUsers);
     } catch (error) {
@@ -508,6 +536,8 @@ export class SocketService implements ISocketService {
   // Handle get online agents request
   private async handleGetOnlineAgents(socket: Socket): Promise<void> {
     try {
+      const requestingUser: AuthSession = socket.data.user;
+      
       // Get agents who are currently connected via sockets AND marked as online in database
       const connectedAgentIds = Array.from(this.connectedUsers.values())
         .filter(user => user.role === 'agent' || user.role === 'admin')
@@ -520,7 +550,28 @@ export class SocketService implements ISocketService {
         role: { $in: [UserRole.AGENT, UserRole.ADMIN] }
       }).select('-password');
 
-      socket.emit('online-agents', onlineAgents);
+      let filteredAgents = onlineAgents;
+
+      // Apply role-based filtering
+      if (requestingUser.role === UserRole.USER) {
+        // Users can only see agents they are chatting with
+        const userChatRooms = await this.chatRoomService.getUserChatRooms(requestingUser.userId);
+        const agentIds = userChatRooms
+          .map(room => this.extractId(room.assignedAgent))
+          .filter(id => id);
+        
+        filteredAgents = onlineAgents.filter(agent => 
+          agentIds.includes((agent._id as any).toString())
+        );
+      } else if (requestingUser.role === UserRole.AGENT) {
+        // Agents can see all other agents and admins (for collaboration)
+        filteredAgents = onlineAgents.filter(agent => 
+          (agent._id as any).toString() !== requestingUser.userId
+        );
+      }
+      // Admins can see all agents (no filtering needed)
+
+      socket.emit('online-agents', filteredAgents);
     } catch (error) {
       console.error('Get online agents error:', error);
       socket.emit('online-agents', []); // Send empty array on error

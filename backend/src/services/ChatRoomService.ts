@@ -6,6 +6,7 @@ import { AuthService } from './AuthService.js';
 import { MessageService } from './MessageService.js';
 import { MessageType } from '../models/Message.js';
 import mongoose from 'mongoose';
+import { ApiError } from '../utils/apiError.js';
 
 export interface CreateChatRoomData {
   type: ChatRoomType;
@@ -50,261 +51,266 @@ export class ChatRoomService {
 
   // Create a new chat room
   async createChatRoom(data: CreateChatRoomData): Promise<IChatRoom | null> {
-    try {
-      console.log(`🏗️ ChatRoomService: Creating chat room with data:`, data);
+    console.log(`🏗️ ChatRoomService: Creating chat room with data:`, data);
 
-      // Validate participants exist
-      const participantIds = data.participants.map(id => new mongoose.Types.ObjectId(id));
-      const participants = await User.find({ _id: { $in: participantIds } });
-      
-      if (participants.length !== data.participants.length) {
-        console.error(`❌ ChatRoomService: Some participants not found. Expected: ${data.participants.length}, Found: ${participants.length}`);
-        throw new Error('Some participants not found');
-      }
-
-      console.log(`👥 ChatRoomService: Validated participants:`, participants.map(p => ({ id: p._id, username: p.username })));
-
-      // For support chats, auto-assign an available agent if not specified
-      let assignedAgent = data.assignedAgent;
-      if (data.type === ChatRoomType.SUPPORT && !assignedAgent) {
-        console.log(`🔍 ChatRoomService: Finding available agent for support chat`);
-        assignedAgent = await this.findAvailableAgent() || undefined;
-        
-        if (assignedAgent) {
-          console.log(`✅ ChatRoomService: Found available agent: ${assignedAgent}`);
-          // Add assigned agent to participants if not already included
-          if (!data.participants.includes(assignedAgent)) {
-            participantIds.push(new mongoose.Types.ObjectId(assignedAgent));
-            console.log(`➕ ChatRoomService: Added agent to participants. New count: ${participantIds.length}`);
-          }
-        } else {
-          console.warn(`⚠️ ChatRoomService: No available agent found for support chat`);
-        }
-      }
-
-      const chatRoom = new ChatRoom({
-        name: data.name,
-        type: data.type,
-        status: ChatRoomStatus.ACTIVE,
-        participants: participantIds,
-        assignedAgent: assignedAgent ? new mongoose.Types.ObjectId(assignedAgent) : undefined,
-        createdBy: new mongoose.Types.ObjectId(data.createdBy),
-        metadata: data.metadata,
-        lastActivity: new Date()
-      });
-
-      await chatRoom.save();
-
-      // Update agent's assigned chats if agent is assigned
-      if (assignedAgent) {
-        await User.findByIdAndUpdate(assignedAgent, {
-          $addToSet: { assignedChats: chatRoom._id }
-        });
-      }
-
-      // Cache the chat room
-      await this.cacheService.cacheChatRoom(chatRoom);
-
-      // Populate before returning
-      await chatRoom.populate([
-        { path: 'participants', select: 'username email role status isOnline' },
-        { path: 'assignedAgent', select: 'username email role status isOnline' },
-        { path: 'createdBy', select: 'username email role' }
-      ]);
-
-      // Automatically send the subject as the first message for support chats
-      if (data.type === ChatRoomType.SUPPORT && data.metadata?.subject) {
-        try {
-          const messageService = MessageService.getInstance();
-          const welcomeMessage = `Hello! I need help with: **${data.metadata.subject}**`;
-          
-          await messageService.createMessage({
-            chatRoomId: (chatRoom._id as mongoose.Types.ObjectId).toString(),
-            senderId: data.createdBy,
-            content: welcomeMessage,
-            messageType: MessageType.TEXT,
-            metadata: {
-              isChatInitial: true,
-              subject: data.metadata.subject
-            }
-          });
-
-          console.log(`📧 ChatRoomService: Initial message sent to chat room ${chatRoom._id} for subject: ${data.metadata.subject}`);
-        } catch (error) {
-          console.error('Error sending initial chat message:', error);
-          // Don't fail the entire operation if message sending fails
-        }
-      }
-
-      return chatRoom;
-    } catch (error) {
-      console.error('Create chat room error:', error);
-      return null;
+    // Validate participants exist
+    const participantIds = data.participants.map(id => new mongoose.Types.ObjectId(id));
+    const participants = await User.find({ _id: { $in: participantIds } });
+    
+    if (participants.length !== data.participants.length) {
+      console.error(`❌ ChatRoomService: Some participants not found. Expected: ${data.participants.length}, Found: ${participants.length}`);
+      throw new ApiError(400, 'Some participants not found');
     }
+
+    console.log(`👥 ChatRoomService: Validated participants:`, participants.map(p => ({ id: p._id, username: p.username })));
+
+    // For support chats, auto-assign an available agent if not specified
+    let assignedAgent = data.assignedAgent;
+    if (data.type === ChatRoomType.SUPPORT && !assignedAgent) {
+      console.log(`🔍 ChatRoomService: Finding available agent for support chat`);
+      assignedAgent = await this.findAvailableAgent() || undefined;
+      
+      if (assignedAgent) {
+        console.log(`✅ ChatRoomService: Found available agent: ${assignedAgent}`);
+        // Add assigned agent to participants if not already included
+        if (!data.participants.includes(assignedAgent)) {
+          participantIds.push(new mongoose.Types.ObjectId(assignedAgent));
+          console.log(`➕ ChatRoomService: Added agent to participants. New count: ${participantIds.length}`);
+        }
+      } else {
+        console.warn(`⚠️ ChatRoomService: No available agent found for support chat`);
+      }
+    }
+
+    const chatRoom = new ChatRoom({
+      name: data.name,
+      type: data.type,
+      status: ChatRoomStatus.ACTIVE,
+      participants: participantIds,
+      assignedAgent: assignedAgent ? new mongoose.Types.ObjectId(assignedAgent) : undefined,
+      createdBy: new mongoose.Types.ObjectId(data.createdBy),
+      metadata: data.metadata,
+      lastActivity: new Date()
+    });
+
+    await chatRoom.save();
+
+    // Update agent's assigned chats if agent is assigned
+    if (assignedAgent) {
+      await User.findByIdAndUpdate(assignedAgent, {
+        $addToSet: { assignedChats: chatRoom._id }
+      });
+    }
+
+    // Cache the chat room
+    await this.cacheService.cacheChatRoom(chatRoom);
+
+    // Populate before returning
+    await chatRoom.populate([
+      { path: 'participants', select: 'username email role status isOnline' },
+      { path: 'assignedAgent', select: 'username email role status isOnline' },
+      { path: 'createdBy', select: 'username email role' }
+    ]);
+
+    // Automatically send the subject as the first message for support chats
+    if (data.type === ChatRoomType.SUPPORT && data.metadata?.subject) {
+      try {
+        const messageService = MessageService.getInstance();
+        const welcomeMessage = `Hello! I need help with: **${data.metadata.subject}**`;
+        
+        await messageService.createMessage({
+          chatRoomId: (chatRoom._id as mongoose.Types.ObjectId).toString(),
+          senderId: data.createdBy,
+          content: welcomeMessage,
+          messageType: MessageType.TEXT,
+          metadata: {
+            isChatInitial: true,
+            subject: data.metadata.subject
+          }
+        });
+
+        console.log(`📧 ChatRoomService: Initial message sent to chat room ${chatRoom._id} for subject: ${data.metadata.subject}`);
+      } catch (error) {
+        console.error('Error sending initial chat message:', error);
+        // Don't fail the entire operation if message sending fails
+      }
+    }
+
+    return chatRoom;
   }
 
   // Get chat rooms for a user
   async getUserChatRooms(userId: string, type?: ChatRoomType): Promise<IChatRoom[]> {
-    try {
-      // Try cache first
-      const cachedChats = await this.cacheService.getUserCachedChats(userId);
-      
-      const query: any = {
-        participants: new mongoose.Types.ObjectId(userId),
-        isActive: true
-      };
+    // Try cache first
+    const cachedChats = await this.cacheService.getUserCachedChats(userId);
+    
+    const query: any = {
+      participants: new mongoose.Types.ObjectId(userId),
+      isActive: true
+    };
 
-      if (type) {
-        query.type = type;
-      }
-
-      const chatRooms = await ChatRoom.find(query)
-        .populate([
-          { path: 'participants', select: 'username email role status isOnline' },
-          { path: 'assignedAgent', select: 'username email role status isOnline' },
-          { path: 'lastMessage', select: 'content messageType createdAt senderId' }
-        ])
-        .sort({ lastActivity: -1 });
-        
-      // Cache the result
-      const chatRoomIds = chatRooms.map(room => (room._id as any).toString());
-      await this.cacheService.cacheUserChats(userId, chatRoomIds);
-
-      return chatRooms;
-    } catch (error) {
-      console.error('Get user chat rooms error:', error);
-      return [];
+    if (type) {
+      query.type = type;
     }
+
+    const chatRooms = await ChatRoom.find(query)
+      .populate([
+        { path: 'participants', select: 'username email role status isOnline' },
+        { path: 'assignedAgent', select: 'username email role status isOnline' },
+        { path: 'lastMessage', select: 'content messageType createdAt senderId' }
+      ])
+      .sort({ lastActivity: -1 });
+      
+    // Cache the result
+    const chatRoomIds = chatRooms.map(room => (room._id as any).toString());
+    await this.cacheService.cacheUserChats(userId, chatRoomIds);
+
+    return chatRooms;
   }
 
   // Get chat rooms assigned to an agent
   async getAgentChatRooms(agentId: string, status?: ChatRoomStatus): Promise<IChatRoom[]> {
-    try {
-      const query: any = {
-        assignedAgent: new mongoose.Types.ObjectId(agentId),
-        isActive: true
-      };
+    const query: any = {
+      assignedAgent: new mongoose.Types.ObjectId(agentId),
+      isActive: true
+    };
 
-      if (status) {
-        query.status = status;
-      }
-
-      return await ChatRoom.find(query)
-        .populate([
-          { path: 'participants', select: 'username email role status isOnline' },
-          { path: 'lastMessage', select: 'content messageType createdAt senderId' }
-        ])
-        .sort({ lastActivity: -1 });
-    } catch (error) {
-      console.error('Get agent chat rooms error:', error);
-      return [];
+    if (status) {
+      query.status = status;
     }
+
+    return await ChatRoom.find(query)
+      .populate([
+        { path: 'participants', select: 'username email role status isOnline' },
+        { path: 'lastMessage', select: 'content messageType createdAt senderId' }
+      ])
+      .sort({ lastActivity: -1 });
   }
 
-  // Assign an agent to a chat room
-  async assignAgent(assignment: AgentAssignment): Promise<boolean> {
-    try {
-      const { chatRoomId, agentId, reason } = assignment;
-
-      // Validate agent exists and has agent role
-      const agent = await User.findById(agentId);
-      if (!agent || !this.authService.hasPermission(agent.role, UserRole.AGENT)) {
-        return false;
-      }
-
-      // Get current chat room
-      const chatRoom = await ChatRoom.findById(chatRoomId);
-      if (!chatRoom) {
-        return false;
-      }
-
-      const previousAgent = chatRoom.assignedAgent;
-
-      // Update chat room
-      await ChatRoom.findByIdAndUpdate(chatRoomId, {
-        assignedAgent: new mongoose.Types.ObjectId(agentId),
-        status: ChatRoomStatus.ACTIVE,
-        $push: previousAgent ? {
-          transferHistory: {
-            fromAgent: previousAgent,
-            toAgent: new mongoose.Types.ObjectId(agentId),
-            transferredAt: new Date(),
-            reason
-          }
-        } : undefined
-      });
-
-      // Update agent's assigned chats
-      await User.findByIdAndUpdate(agentId, {
-        $addToSet: { assignedChats: chatRoomId }
-      });
-
-      // Remove from previous agent if any
-      if (previousAgent) {
-        await User.findByIdAndUpdate(previousAgent, {
-          $pull: { assignedChats: chatRoomId }
-        });
-      }
-
-      // Update cache
-      const updatedRoom = await ChatRoom.findById(chatRoomId);
-      if (updatedRoom) {
-        await this.cacheService.cacheChatRoom(updatedRoom);
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Assign agent error:', error);
-      return false;
+  // Get chat room by ID
+  async getChatRoomById(chatRoomId: string): Promise<IChatRoom | null> {
+    if (!mongoose.Types.ObjectId.isValid(chatRoomId)) {
+      throw new ApiError(400, 'Invalid chat room ID format');
     }
+
+    // Try cache first
+    const cached = await this.cacheService.getCachedChatRoom(chatRoomId);
+    if (cached) {
+      // Convert cached data back to full object if needed
+      // For now, just fetch from database
+    }
+
+    return await ChatRoom.findById(chatRoomId)
+      .populate([
+        { path: 'participants', select: 'username email role status isOnline' },
+        { path: 'assignedAgent', select: 'username email role status isOnline' },
+        { path: 'createdBy', select: 'username email role' },
+        { path: 'lastMessage', select: 'content messageType createdAt senderId' }
+      ]);
   }
 
   // Find available agent based on workload
   async findAvailableAgent(): Promise<string | null> {
-    try {
-      console.log(`🔍 Finding available agent`);
-      
-      // Build query for agents
-      const agentQuery: any = {
-        role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
-        isOnline: true
-      };
+    console.log(`🔍 Finding available agent`);
+    
+    // Build query for agents
+    const agentQuery: any = {
+      role: { $in: [UserRole.AGENT, UserRole.ADMIN] },
+      isOnline: true
+    };
 
-      // Get available agents
-      const availableAgents = await User.find(agentQuery).lean();
-      console.log(`📋 Found ${availableAgents.length} available agents`);
+    // Get available agents
+    const availableAgents = await User.find(agentQuery).lean();
+    console.log(`📋 Found ${availableAgents.length} available agents`);
 
-      if (availableAgents.length === 0) {
-        console.log('❌ No agents available');
-        return null;
-      }
-
-      // Calculate workload for each agent (number of active chats)
-      const agentsWithWorkload = await Promise.all(
-        availableAgents.map(async (agent) => {
-          const activeChats = await ChatRoom.countDocuments({
-            assignedAgent: agent._id,
-            status: { $in: [ChatRoomStatus.ACTIVE, ChatRoomStatus.PENDING] }
-          });
-          
-          return {
-            ...agent,
-            workload: activeChats
-          };
-        })
-      );
-
-      // Sort by workload (ascending)
-      agentsWithWorkload.sort((a, b) => a.workload - b.workload);
-
-      const selectedAgent = agentsWithWorkload[0];
-      console.log(`✅ Selected agent: ${selectedAgent.username} (workload: ${selectedAgent.workload})`);
-      
-      return selectedAgent._id.toString();
-    } catch (error) {
-      console.error('Find available agent error:', error);
+    if (availableAgents.length === 0) {
+      console.log('❌ No agents available');
       return null;
     }
+
+    // Calculate workload for each agent (number of active chats)
+    const agentsWithWorkload = await Promise.all(
+      availableAgents.map(async (agent) => {
+        const activeChats = await ChatRoom.countDocuments({
+          assignedAgent: agent._id,
+          status: { $in: [ChatRoomStatus.ACTIVE, ChatRoomStatus.PENDING] }
+        });
+        
+        return {
+          ...agent,
+          workload: activeChats
+        };
+      })
+    );
+
+    // Sort by workload (ascending)
+    agentsWithWorkload.sort((a, b) => a.workload - b.workload);
+
+    const selectedAgent = agentsWithWorkload[0];
+    console.log(`✅ Selected agent: ${selectedAgent.username} (workload: ${selectedAgent.workload})`);
+    
+    return selectedAgent._id.toString();
+  }
+
+  // Assign an agent to a chat room
+  async assignAgent(assignment: AgentAssignment): Promise<boolean> {
+    const { chatRoomId, agentId, reason } = assignment;
+
+    if (!mongoose.Types.ObjectId.isValid(chatRoomId)) {
+      throw new ApiError(400, 'Invalid chat room ID format');
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(agentId)) {
+      throw new ApiError(400, 'Invalid agent ID format');
+    }
+
+    // Validate agent exists and has agent role
+    const agent = await User.findById(agentId);
+    if (!agent || !this.authService.hasPermission(agent.role, UserRole.AGENT)) {
+      throw new ApiError(400, 'Invalid agent or insufficient permissions');
+    }
+
+    // Get current chat room
+    const chatRoom = await ChatRoom.findById(chatRoomId);
+    if (!chatRoom) {
+      throw new ApiError(404, 'Chat room not found');
+    }
+
+    const previousAgent = chatRoom.assignedAgent;
+
+    // Update chat room
+    await ChatRoom.findByIdAndUpdate(chatRoomId, {
+      assignedAgent: new mongoose.Types.ObjectId(agentId),
+      status: ChatRoomStatus.ACTIVE,
+      $push: previousAgent ? {
+        transferHistory: {
+          fromAgent: previousAgent,
+          toAgent: new mongoose.Types.ObjectId(agentId),
+          transferredAt: new Date(),
+          reason
+        }
+      } : undefined
+    });
+
+    // Update agent's assigned chats
+    await User.findByIdAndUpdate(agentId, {
+      $addToSet: { assignedChats: chatRoomId }
+    });
+
+    // Remove from previous agent if any
+    if (previousAgent) {
+      await User.findByIdAndUpdate(previousAgent, {
+        $pull: { assignedChats: chatRoomId }
+      });
+    }
+
+    // Update cache
+    const updatedRoom = await ChatRoom.findById(chatRoomId);
+    if (updatedRoom) {
+      await this.cacheService.cacheChatRoom(updatedRoom);
+    }
+
+    return true;
   }
 
   // Close a chat room
@@ -358,29 +364,6 @@ export class ChatRoomService {
     } catch (error) {
       console.error('Transfer chat error:', error);
       return false;
-    }
-  }
-
-  // Get chat room by ID
-  async getChatRoomById(chatRoomId: string): Promise<IChatRoom | null> {
-    try {
-      // Try cache first
-      const cached = await this.cacheService.getCachedChatRoom(chatRoomId);
-      if (cached) {
-        // Convert cached data back to full object if needed
-        // For now, just fetch from database
-      }
-
-      return await ChatRoom.findById(chatRoomId)
-        .populate([
-          { path: 'participants', select: 'username email role status isOnline' },
-          { path: 'assignedAgent', select: 'username email role status isOnline' },
-          { path: 'createdBy', select: 'username email role' },
-          { path: 'lastMessage', select: 'content messageType createdAt senderId' }
-        ]);
-    } catch (error) {
-      console.error('Get chat room by ID error:', error);
-      return null;
     }
   }
 
