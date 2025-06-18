@@ -63,9 +63,20 @@ export class ChatRoomService {
   }
 
   // Emit socket event to specific user
-  private emitToUser(userId: string, event: string, data: any): void {
+  private async emitToUser(userId: string, event: string, data: any): Promise<void> {
     if (this.io) {
-      this.io.to(`user:${userId}`).emit(event, data);
+      // Use the same method as SocketService for consistency
+      try {
+        const socketId = await this.cacheService.getUserSocketId(userId);
+        if (socketId) {
+          this.io.to(socketId).emit(event, data);
+          console.log(`📡 Emitting ${event} to user ${userId} via socket ${socketId}`);
+        } else {
+          console.warn(`⚠️ No socket found for user ${userId}, cannot emit ${event}`);
+        }
+      } catch (error) {
+        console.error('Error emitting to user:', error);
+      }
     }
   }
 
@@ -589,7 +600,7 @@ export class ChatRoomService {
         this.emitToChatRoom(chatRoomId, 'agent-removed', notificationData);
 
         // Notify the removed agent
-        this.emitToUser(previousAgentId, 'agent-assignment-removed', {
+        await this.emitToUser(previousAgentId, 'agent-assignment-removed', {
           chatRoomId,
           reason: reason || 'Admin removal'
         });
