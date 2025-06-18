@@ -541,50 +541,31 @@ export class ChatRoomService {
         throw new Error('No agent assigned to this chat');
       }
 
-      // Find a new agent for this chat
-      const newAgentId = await this.findAvailableAgent();
-
       // Step 1: Remove previous agent from participants
       await ChatRoom.findByIdAndUpdate(chatRoomId, {
         $pull: { participants: new mongoose.Types.ObjectId(previousAgentId) }
       });
 
-      // Step 2: Update chat room with new agent and handle participant changes
+      // Step 2: Update chat room - NO auto-assignment, admin must manually assign
       const updateData: any = {
+        assignedAgent: null,
+        status: ChatRoomStatus.PENDING,
         $push: {
           transferHistory: {
             fromAgent: new mongoose.Types.ObjectId(previousAgentId),
-            toAgent: newAgentId ? new mongoose.Types.ObjectId(newAgentId) : null,
+            toAgent: null,
             transferredAt: new Date(),
             reason: reason || 'Admin removal'
           }
         }
       };
 
-      if (newAgentId) {
-        updateData.assignedAgent = new mongoose.Types.ObjectId(newAgentId);
-        updateData.status = ChatRoomStatus.ACTIVE;
-        // Add new agent to participants
-        updateData.$addToSet = {
-          participants: new mongoose.Types.ObjectId(newAgentId)
-        };
-      } else {
-        updateData.assignedAgent = null;
-        updateData.status = ChatRoomStatus.PENDING;
-      }
-
       await ChatRoom.findByIdAndUpdate(chatRoomId, updateData);
 
-      // Update agent assignments
+      // Update agent assignments - remove from previous agent
       await User.findByIdAndUpdate(previousAgentId, {
         $pull: { assignedChats: chatRoomId }
       });
-
-      if (newAgentId) {
-        await User.findByIdAndUpdate(newAgentId, {
-          $addToSet: { assignedChats: chatRoomId }
-        });
-      }
 
       // Get updated chat room for notifications
       const updatedRoom = await ChatRoom.findById(chatRoomId)
@@ -599,7 +580,7 @@ export class ChatRoomService {
         const notificationData = {
           chatRoomId,
           removedAgentId: previousAgentId,
-          newAgent: updatedRoom.assignedAgent,
+          newAgent: null, // No auto-assignment
           reason: reason || 'Admin removal',
           timestamp: new Date()
         };
@@ -613,16 +594,10 @@ export class ChatRoomService {
           reason: reason || 'Admin removal'
         });
 
-        // Notify the new agent if there is one
-        if (newAgentId) {
-          this.emitToUser(newAgentId, 'agent-assignment-received', {
-            chatRoom: updatedRoom,
-            reason: 'Auto-assigned after agent removal'
-          });
-        }
+        // No notification to new agent since no auto-assignment
       }
 
-      console.log(`✅ Agent removed from chat ${chatRoomId}, new agent: ${newAgentId || 'none available'}`);
+      console.log(`✅ Agent removed from chat ${chatRoomId}, status: PENDING (no auto-assignment)`);
       return true;
     } catch (error) {
       console.error('Remove agent from chat error:', error);
