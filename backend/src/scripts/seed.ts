@@ -4,230 +4,221 @@ import { User, UserRole, UserStatus, Department } from '../models/User.js';
 import { ChatRoom, ChatRoomType, ChatRoomStatus } from '../models/ChatRoom.js';
 import { Message, MessageType, MessageStatus } from '../models/Message.js';
 import dotenv from 'dotenv';
+import { DatabaseConfig } from '../config/database.js';
 
 // Load environment variables
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chatapp';
-
-// Sample users data
 const sampleUsers = [
-  // Admin users
+  // 1 Admin
   {
-    username: 'admin',
-    email: 'admin@example.com',
+    username: 'admin_ram',
+    email: 'ram.admin@hamrotech.com',
     password: 'password123',
     role: UserRole.ADMIN,
     status: UserStatus.ONLINE,
     department: Department.GENERAL_SUPPORT,
     isOnline: true,
     profile: {
-      firstName: 'Admin',
-      lastName: 'User',
-      bio: 'System Administrator',
-      location: 'Headquarters'
+      firstName: 'Ram',
+      lastName: 'Shrestha',
+      bio: 'मुख्य प्रशासक - System Administrator with full access',
+      location: 'काठमाडौं, नेपाल'
     }
   },
+  // 2 Agents
   {
-    username: 'superadmin',
-    email: 'superadmin@example.com',
-    password: 'password123',
-    role: UserRole.ADMIN,
-    status: UserStatus.ONLINE,
-    department: Department.GENERAL_SUPPORT,
-    isOnline: true,
-    profile: {
-      firstName: 'Super',
-      lastName: 'Admin',
-      bio: 'Super Administrator',
-      location: 'Headquarters'
-    }
-  },
-
-  // Agent users
-  {
-    username: 'agent_john',
-    email: 'agent@example.com',
+    username: 'agent_suresh',
+    email: 'suresh.agent@hamrotech.com',
     password: 'password123',
     role: UserRole.AGENT,
     status: UserStatus.ONLINE,
     department: Department.TECHNICAL_SUPPORT,
-    specialization: ['Technical Issues', 'Hardware Support', 'Software Troubleshooting'],
+    specialization: 'Technical Issues, Hardware Support, Network Troubleshooting',
     isOnline: true,
     profile: {
-      firstName: 'John',
-      lastName: 'Smith',
-      bio: 'Technical Support Specialist with 5+ years experience',
-      location: 'New York Office'
+      firstName: 'Suresh',
+      lastName: 'Gurung',
+      bio: 'प्राविधिक सहायता विशेषज्ञ - Senior Technical Support Specialist with 5+ years experience',
+      location: 'पोखरा, नेपाल'
     }
   },
   {
-    username: 'agent_sarah',
-    email: 'sarah.agent@example.com',
+    username: 'agent_sunita',
+    email: 'sunita.agent@hamrotech.com',
     password: 'password123',
     role: UserRole.AGENT,
     status: UserStatus.ONLINE,
     department: Department.BILLING,
-    specialization: ['Billing Issues', 'Payment Processing', 'Account Management'],
+    specialization: 'Billing Issues, Payment Processing, Account Management',
     isOnline: true,
     profile: {
-      firstName: 'Sarah',
-      lastName: 'Johnson',
-      bio: 'Billing Support Expert',
-      location: 'Chicago Office'
+      firstName: 'Sunita',
+      lastName: 'Thapa',
+      bio: 'बिलिङ र खाता व्यवस्थापन विशेषज्ञ - Billing and Account Management Expert',
+      location: 'भक्तपुर, नेपाल'
     }
   },
+  // 4 Regular Users
   {
-    username: 'agent_mike',
-    email: 'mike.agent@example.com',
-    password: 'password123',
-    role: UserRole.AGENT,
-    status: UserStatus.ONLINE,
-    department: Department.SALES,
-    specialization: ['Sales Inquiries', 'Product Information', 'Pricing'],
-    isOnline: false,
-    profile: {
-      firstName: 'Mike',
-      lastName: 'Wilson',
-      bio: 'Sales Support Representative',
-      location: 'Los Angeles Office'
-    }
-  },
-  {
-    username: 'agent_emma',
-    email: 'emma.agent@example.com',
-    password: 'password123',
-    role: UserRole.AGENT,
-    status: UserStatus.BUSY,
-    department: Department.GENERAL_SUPPORT,
-    specialization: ['General Inquiries', 'Customer Service', 'First Contact Resolution'],
-    isOnline: true,
-    profile: {
-      firstName: 'Emma',
-      lastName: 'Davis',
-      bio: 'General Support Agent',
-      location: 'Remote'
-    }
-  },
-
-  // Regular users
-  {
-    username: 'user1',
-    email: 'user@example.com',
+    username: 'aarti_paudel',
+    email: 'aarti.paudel@technepal.com',
     password: 'password123',
     role: UserRole.USER,
     status: UserStatus.ONLINE,
     isOnline: true,
     profile: {
-      firstName: 'Alice',
-      lastName: 'Cooper',
-      bio: 'Regular user',
-      location: 'San Francisco'
+      firstName: 'Aarti',
+      lastName: 'Paudel',
+      bio: 'Software Engineer at TechNepal Pvt Ltd',
+      location: 'काठमाडौं, नेपाल'
     }
   },
   {
-    username: 'john_doe',
-    email: 'john.doe@example.com',
+    username: 'binod_sharma',
+    email: 'binod.sharma@digitalnepal.com',
     password: 'password123',
     role: UserRole.USER,
     status: UserStatus.ONLINE,
     isOnline: true,
     profile: {
-      firstName: 'John',
-      lastName: 'Doe',
-      bio: 'Software Developer',
-      location: 'Seattle'
+      firstName: 'Binod',
+      lastName: 'Sharma',
+      bio: 'Digital Marketing Manager',
+      location: 'ललितपुर, नेपाल'
     }
   },
   {
-    username: 'jane_smith',
-    email: 'jane.smith@example.com',
-    password: 'password123',
-    role: UserRole.USER,
-    status: UserStatus.OFFLINE,
-    isOnline: false,
-    profile: {
-      firstName: 'Jane',
-      lastName: 'Smith',
-      bio: 'Product Manager',
-      location: 'Boston'
-    }
-  },
-  {
-    username: 'bob_wilson',
-    email: 'bob.wilson@example.com',
+    username: 'chitra_rai',
+    email: 'chitra.rai@designstudio.com',
     password: 'password123',
     role: UserRole.USER,
     status: UserStatus.ONLINE,
     isOnline: true,
     profile: {
-      firstName: 'Bob',
-      lastName: 'Wilson',
-      bio: 'Marketing Specialist',
-      location: 'Austin'
+      firstName: 'Chitra',
+      lastName: 'Rai',
+      bio: 'Product Designer',
+      location: 'धरान, नेपाल'
     }
   },
   {
-    username: 'lisa_brown',
-    email: 'lisa.brown@example.com',
+    username: 'dipesh_nepal',
+    email: 'dipesh.nepal@projecthub.com',
     password: 'password123',
     role: UserRole.USER,
-    status: UserStatus.AWAY,
-    isOnline: false,
+    status: UserStatus.ONLINE,
+    isOnline: true,
     profile: {
-      firstName: 'Lisa',
-      lastName: 'Brown',
-      bio: 'UX Designer',
-      location: 'Portland'
+      firstName: 'Dipesh',
+      lastName: 'Nepal',
+      bio: 'Project Manager',
+      location: 'बुटवल, नेपाल'
     }
   }
 ];
 
-// Sample chat rooms
-const sampleChatRooms = [
+const chatRoomConfigurations = [
+  // SUPPORT CHAT ROOMS
   {
-    name: 'General Discussion',
-    type: ChatRoomType.GROUP,
+    name: 'प्राविधिक सहायता - Server समस्या',
+    type: ChatRoomType.SUPPORT,
     status: ChatRoomStatus.ACTIVE,
-    description: 'General chat room for all users'
+    agentEmail: 'suresh.agent@hamrotech.com',
+    participantEmails: ['aarti.paudel@technepal.com', 'binod.sharma@digitalnepal.com'],
+    metadata: {
+      subject: 'Server connectivity and performance issues',
+      priority: 'high',
+      tags: ['server', 'technical', 'connectivity']
+    }
   },
   {
-    name: 'Development Team',
-    type: ChatRoomType.GROUP,
+    name: 'बिलिङ र खाता सहायता',
+    type: ChatRoomType.SUPPORT,
     status: ChatRoomStatus.ACTIVE,
-    description: 'Private chat for development team'
+    agentEmail: 'sunita.agent@hamrotech.com',
+    participantEmails: ['chitra.rai@designstudio.com', 'dipesh.nepal@projecthub.com'],
+    metadata: {
+      subject: 'Monthly billing and payment inquiries',
+      priority: 'high',
+      tags: ['billing', 'payment', 'account']
+    }
+  },
+
+  // DIRECT CHAT ROOMS (peer-to-peer conversations)
+  {
+    name: null, // Direct chats don't need explicit names
+    type: ChatRoomType.DIRECT,
+    status: ChatRoomStatus.ACTIVE,
+    agentEmail: null, // No agent for direct chats
+    participantEmails: ['aarti.paudel@technepal.com', 'chitra.rai@designstudio.com'],
+    metadata: {
+      subject: 'Project collaboration discussion',
+      tags: ['collaboration', 'project']
+    }
   },
   {
-    name: 'Marketing Team',
-    type: ChatRoomType.GROUP,
+    name: null,
+    type: ChatRoomType.DIRECT,
     status: ChatRoomStatus.ACTIVE,
-    description: 'Marketing team discussions'
+    agentEmail: null,
+    participantEmails: ['binod.sharma@digitalnepal.com', 'dipesh.nepal@projecthub.com'],
+    metadata: {
+      subject: 'Marketing and project coordination',
+      tags: ['marketing', 'project']
+    }
   }
 ];
 
-// Sample messages
-const sampleMessages = [
-  {
-    content: 'Welcome to the general discussion room! Feel free to chat with everyone.',
-    messageType: MessageType.TEXT
-  },
-  {
-    content: 'Hello everyone! Great to be here.',
-    messageType: MessageType.TEXT
-  },
-  {
-    content: 'Has anyone tried the new features in the latest update?',
-    messageType: MessageType.TEXT
-  },
-  {
-    content: 'Yes, the new chat system is amazing! Real-time typing indicators work perfectly.',
-    messageType: MessageType.TEXT
-  },
-  {
-    content: 'I love the unread message count feature. Very helpful!',
-    messageType: MessageType.TEXT
-  }
-];
+// Sample messages with relevant Nepali context
+const sampleMessageTemplates = {
+  technical: [
+    'नमस्कार! Server मा connection problem भएको छ। कृपया मद्दत गर्नुहोस्।',
+    'हाम्रो website load भइरहेको छैन। के गर्ने?',
+    'Database backup कसरी लिने? Process के हो?',
+    'SSL certificate expire भएको notification आएको छ।',
+    'Email server configuration गर्न मद्दत चाहिन्छ।',
+    'API response slow आइरहेको छ। Optimize कसरी गर्ने?'
+  ],
+  billing: [
+    'मेरो यस महिनाको bill कति आएको छ?',
+    'eSewa बाट payment गरेको तर reflect भएको छैन।',
+    'Khalti मा payment fail भयो। फेरि try गर्दा double charge भयो।',
+    'Monthly subscription plan change गर्न चाहन्छु।',
+    'Invoice download गर्न सकिँदैन। PDF file corrupt छ।',
+    'Refund process के हो? कति दिन लाग्छ?'
+  ],
+  sales: [
+    'तपाईंको premium plan को features के के छन्?',
+    'Enterprise package को pricing कति छ?',
+    'Free trial period कति दिनको हुन्छ?',
+    'अन्य competitor हरूसँग comparison गर्न सक्नुहुन्छ?',
+    'Custom solution बनाउन सक्नुहुन्छ?',
+    'Demo schedule गर्न चाहन्छु। कहिले available छ?'
+  ],
+  direct: [
+    'Hey! How is your project going?',
+    'तपाईंको काम कस्तो चलिरहेको छ?',
+    'Can we discuss the deadline for the new feature?',
+    'Meeting को लागि कहिले free हुनुहुन्छ?',
+    'I think we should collaborate on this task.',
+    'Your expertise would be really helpful here.',
+    'Let me know if you need any assistance.',
+    'Great work on the recent updates!',
+    'सहयोग गर्न पाएर खुशी लाग्यो।',
+    'Looking forward to working together more.',
+    'Thanks for the quick response!',
+    'Perfect! That sounds like a good plan.'
+  ],
+  general: [
+    'धन्यवाद! तपाईंको सहायता निकै राम्रो लाग्यो।',
+    'अब problem solve भयो। Thank you so much!',
+    'अझै केही confusion छ। फेरि explain गर्न सक्नुहुन्छ?',
+    'यो process को documentation कहाँ पाउन सकिन्छ?',
+    'सबै कुरा clear भयो। Great support team!',
+    'Next step के गर्ने? Guide गर्नुहोस्।'
+  ]
+};
 
 class DatabaseSeeder {
   private users: any[] = [];
@@ -235,7 +226,7 @@ class DatabaseSeeder {
 
   async connect() {
     try {
-      await mongoose.connect(MONGODB_URI);
+      await DatabaseConfig.connectMongoDB();
       console.log('✅ Connected to MongoDB');
     } catch (error) {
       console.error('❌ Failed to connect to MongoDB:', error);
@@ -246,12 +237,23 @@ class DatabaseSeeder {
   async clearDatabase() {
     try {
       console.log('🧹 Clearing existing data...');
-      await Promise.all([
-        User.deleteMany({}),
-        ChatRoom.deleteMany({}),
-        Message.deleteMany({})
-      ]);
-      console.log('✅ Database cleared');
+      
+      // Check if data already exists
+      const existingUsers = await User.countDocuments();
+      const existingRooms = await ChatRoom.countDocuments();
+      const existingMessages = await Message.countDocuments();
+      
+      if (existingUsers > 0 || existingRooms > 0 || existingMessages > 0) {
+        console.log(`   Found existing data: ${existingUsers} users, ${existingRooms} rooms, ${existingMessages} messages`);
+        await Promise.all([
+          User.deleteMany({}),
+          ChatRoom.deleteMany({}),
+          Message.deleteMany({})
+        ]);
+        console.log('✅ Existing data cleared for fresh seeding');
+      } else {
+        console.log('   No existing data found, proceeding with fresh seeding');
+      }
     } catch (error) {
       console.error('❌ Failed to clear database:', error);
       throw error;
@@ -260,7 +262,7 @@ class DatabaseSeeder {
 
   async seedUsers() {
     try {
-      console.log('👥 Seeding users...');
+      console.log('👥 Seeding users with Nepali names...');
       
       for (const userData of sampleUsers) {
         const hashedPassword = await bcrypt.hash(userData.password, 12);
@@ -278,7 +280,7 @@ class DatabaseSeeder {
         console.log(`   ✅ Created ${userData.role}: ${userData.username} (${userData.email})`);
       }
       
-      console.log(`✅ Created ${this.users.length} users`);
+      console.log(`✅ Created ${this.users.length} users with Nepali names`);
     } catch (error) {
       console.error('❌ Failed to seed users:', error);
       throw error;
@@ -287,17 +289,44 @@ class DatabaseSeeder {
 
   async seedChatRooms() {
     try {
-      console.log('💬 Seeding chat rooms...');
+      console.log('💬 Seeding chat rooms with Nepali context...');
       
-      for (const roomData of sampleChatRooms) {
-        // Get random participants for each room
-        const participants = this.getRandomParticipants(3, 6);
-        const createdBy = participants[0];
-        
+      // Create chat rooms according to the configuration
+      for (const config of chatRoomConfigurations) {
+        // Find participants by emails
+        const participants = config.participantEmails.map(email => 
+          this.users.find(user => user.email === email)
+        ).filter(Boolean);
+
+        if (participants.length !== config.participantEmails.length) {
+          console.error(`❌ Some participants not found for room: ${config.name || 'Direct Chat'}`);
+          continue;
+        }
+
+        let allParticipants = participants;
+        let assignedAgent = null;
+
+        // Handle support chats (with agents)
+        if (config.type === ChatRoomType.SUPPORT && config.agentEmail) {
+          const agent = this.users.find(user => user.email === config.agentEmail);
+          if (!agent) {
+            console.error(`❌ Agent not found: ${config.agentEmail}`);
+            continue;
+          }
+          allParticipants = [agent, ...participants];
+          assignedAgent = agent._id;
+        }
+
+        const createdBy = participants[0]; // First participant creates the room
+
         const chatRoom = new ChatRoom({
-          ...roomData,
-          participants: participants.map(user => user._id),
+          name: config.name,
+          type: config.type,
+          status: config.status,
+          participants: allParticipants.map(user => user._id),
+          assignedAgent: assignedAgent,
           createdBy: createdBy._id,
+          metadata: config.metadata,
           lastActivity: new Date(),
           createdAt: new Date(),
           updatedAt: new Date()
@@ -305,35 +334,57 @@ class DatabaseSeeder {
 
         const savedRoom = await chatRoom.save();
         this.chatRooms.push(savedRoom);
+
+        // Update agent's assigned chats (only for support rooms)
+        if (assignedAgent) {
+          await User.findByIdAndUpdate(assignedAgent, {
+            $addToSet: { assignedChats: savedRoom._id }
+          });
+        }
         
-        console.log(`   ✅ Created chat room: ${roomData.name} with ${participants.length} participants`);
-      }
-
-      // Create some direct message rooms
-      const directRooms = [
-        [this.users[0], this.users[5]], // Admin and User1
-        [this.users[2], this.users[6]], // Agent John and John Doe
-        [this.users[3], this.users[7]], // Agent Sarah and Jane Smith
-      ];
-
-      for (const [user1, user2] of directRooms) {
-        const chatRoom = new ChatRoom({
-          type: ChatRoomType.DIRECT,
-          status: ChatRoomStatus.ACTIVE,
-          participants: [user1._id, user2._id],
-          createdBy: user1._id,
-          lastActivity: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date()
-        });
-
-        const savedRoom = await chatRoom.save();
-        this.chatRooms.push(savedRoom);
+        const roomDisplayName = config.name || `Direct chat between ${participants.map(p => p.username).join(' & ')}`;
+        console.log(`   ✅ Created ${config.type} room: ${roomDisplayName}`);
         
-        console.log(`   ✅ Created direct message room between ${user1.username} and ${user2.username}`);
+        if (assignedAgent) {
+          const agent = allParticipants.find(p => p._id.toString() === assignedAgent.toString());
+          console.log(`      Agent: ${agent.username} (${agent.email})`);
+        }
+        console.log(`      Participants: ${participants.map(p => p.username).join(', ')}`);
       }
       
-      console.log(`✅ Created ${this.chatRooms.length} chat rooms`);
+      console.log(`✅ Created ${this.chatRooms.length} chat rooms with Nepali context`);
+      
+      // Summary of chat room types
+      const supportRooms = this.chatRooms.filter(r => r.type === ChatRoomType.SUPPORT).length;
+      const directRooms = this.chatRooms.filter(r => r.type === ChatRoomType.DIRECT).length;
+      console.log(`   Support rooms: ${supportRooms}`);
+      console.log(`   Direct rooms: ${directRooms}`);
+      
+      // Summary of assignments
+      console.log('\n📊 Agent Assignment Summary:');
+      const agentUsers = this.users.filter(user => user.role === UserRole.AGENT);
+      for (const agent of agentUsers) {
+        const agentRooms = this.chatRooms.filter(room => 
+          room.assignedAgent && room.assignedAgent.toString() === agent._id.toString()
+        );
+        console.log(`   ${agent.username}: ${agentRooms.length} support rooms assigned`);
+      }
+
+      // Check participant usage
+      const regularUsers = this.users.filter(user => user.role === UserRole.USER);
+      const usedUsers = new Set();
+      
+      for (const room of this.chatRooms) {
+        for (const participantId of room.participants) {
+          const participant = this.users.find(u => u._id.toString() === participantId.toString());
+          if (participant && participant.role === UserRole.USER) {
+            usedUsers.add(participant.email);
+          }
+        }
+      }
+      
+      console.log(`   Regular users used: ${usedUsers.size}/${regularUsers.length}`);
+      
     } catch (error) {
       console.error('❌ Failed to seed chat rooms:', error);
       throw error;
@@ -342,7 +393,7 @@ class DatabaseSeeder {
 
   async seedMessages() {
     try {
-      console.log('📝 Seeding messages...');
+      console.log('📝 Seeding contextual messages...');
       let totalMessages = 0;
       
       for (const chatRoom of this.chatRooms) {
@@ -350,18 +401,40 @@ class DatabaseSeeder {
           chatRoom.participants.includes(user._id)
         );
         
-        // Create 3-8 messages per room
-        const messageCount = Math.floor(Math.random() * 6) + 3;
+        // Determine message type based on chat room type and agent department
+        const agent = participants.find(p => p.role === UserRole.AGENT);
+        let messageTemplates = sampleMessageTemplates.general;
+        
+        if (chatRoom.type === ChatRoomType.DIRECT) {
+          // Direct chats use direct message templates
+          messageTemplates = [...sampleMessageTemplates.direct, ...sampleMessageTemplates.general];
+        } else if (agent) {
+          // Support chats use department-specific templates
+          switch (agent.department) {
+            case Department.TECHNICAL_SUPPORT:
+              messageTemplates = [...sampleMessageTemplates.technical, ...sampleMessageTemplates.general];
+              break;
+            case Department.BILLING:
+              messageTemplates = [...sampleMessageTemplates.billing, ...sampleMessageTemplates.general];
+              break;
+            case Department.SALES:
+              messageTemplates = [...sampleMessageTemplates.sales, ...sampleMessageTemplates.general];
+              break;
+          }
+        }
+        
+        // Create 4-8 messages per room for realistic conversation
+        const messageCount = Math.floor(Math.random() * 5) + 4;
         
         for (let i = 0; i < messageCount; i++) {
           const sender = participants[Math.floor(Math.random() * participants.length)];
-          const messageData = sampleMessages[Math.floor(Math.random() * sampleMessages.length)];
+          const messageContent = messageTemplates[Math.floor(Math.random() * messageTemplates.length)];
           
           const message = new Message({
             chatRoomId: chatRoom._id,
             senderId: sender._id,
-            content: `${messageData.content} (Message ${i + 1})`,
-            messageType: messageData.messageType,
+            content: messageContent,
+            messageType: MessageType.TEXT,
             status: MessageStatus.READ,
             deliveredTo: participants
               .filter(p => p._id.toString() !== sender._id.toString())
@@ -371,12 +444,11 @@ class DatabaseSeeder {
               })),
             readBy: participants
               .filter(p => p._id.toString() !== sender._id.toString())
-              .slice(0, Math.floor(Math.random() * participants.length)) // Some users have read it
               .map(p => ({
                 userId: p._id,
                 readAt: new Date(Date.now() - Math.random() * 30000) // Random read time within last 30 seconds
               })),
-            createdAt: new Date(Date.now() - (messageCount - i) * 60000), // Messages created in chronological order
+            createdAt: new Date(Date.now() - (messageCount - i) * 120000), // Messages created in chronological order (2 min intervals)
             updatedAt: new Date()
           });
 
@@ -395,23 +467,17 @@ class DatabaseSeeder {
         }
       }
       
-      console.log(`✅ Created ${totalMessages} messages across all chat rooms`);
+      console.log(`✅ Created ${totalMessages} contextual messages across all chat rooms`);
     } catch (error) {
       console.error('❌ Failed to seed messages:', error);
       throw error;
     }
   }
 
-  private getRandomParticipants(min: number, max: number) {
-    const count = Math.floor(Math.random() * (max - min + 1)) + min;
-    const shuffled = [...this.users].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-  }
-
   async printSummary() {
     try {
       console.log('\n📊 Seeding Summary:');
-      console.log('='.repeat(50));
+      console.log('='.repeat(60));
       
       const userCounts = await User.aggregate([
         { $group: { _id: '$role', count: { $sum: 1 } } }
@@ -427,22 +493,36 @@ class DatabaseSeeder {
       console.log(`   Chat Rooms: ${chatRoomCount}`);
       console.log(`   Messages: ${messageCount}`);
       
-      console.log('\n🔐 Login Credentials:');
-      console.log('='.repeat(50));
-      console.log('Admin:');
-      console.log('   Email: admin@example.com | Password: password123');
-      console.log('   Email: superadmin@example.com | Password: password123');
-      console.log('\nAgents:');
-      console.log('   Email: agent@example.com | Password: password123');
-      console.log('   Email: sarah.agent@example.com | Password: password123');
-      console.log('   Email: mike.agent@example.com | Password: password123');
-      console.log('   Email: emma.agent@example.com | Password: password123');
-      console.log('\nUsers:');
-      console.log('   Email: user@example.com | Password: password123');
-      console.log('   Email: john.doe@example.com | Password: password123');
-      console.log('   Email: jane.smith@example.com | Password: password123');
-      console.log('   Email: bob.wilson@example.com | Password: password123');
-      console.log('   Email: lisa.brown@example.com | Password: password123');
+      console.log('\n🔐 नेपाली Login Credentials:');
+      console.log('='.repeat(60));
+      console.log('Admin (1 user):');
+      console.log('   Email: ram.admin@hamrotech.com | Password: password123');
+      console.log('   Name: Ram Shrestha (मुख्य प्रशासक)');
+      
+      console.log('\nAgents (2 users):');
+      console.log('   Email: suresh.agent@hamrotech.com | Password: password123');
+      console.log('   Name: Suresh Gurung (प्राविधिक सहायता विशेषज्ञ)');
+      console.log('   Email: sunita.agent@hamrotech.com | Password: password123');
+      console.log('   Name: Sunita Thapa (बिलिङ र खाता व्यवस्थापन)');
+      
+      console.log('\nRegular Users (4 users):');
+      const regularUsers = [
+        'aarti.paudel@technepal.com - Aarti Paudel (Software Engineer)',
+        'binod.sharma@digitalnepal.com - Binod Sharma (Digital Marketing)',
+        'chitra.rai@designstudio.com - Chitra Rai (Product Designer)',
+        'dipesh.nepal@projecthub.com - Dipesh Nepal (Project Manager)'
+      ];
+      
+      regularUsers.forEach(user => {
+        console.log(`   Email: ${user} | Password: password123`);
+      });
+      
+      console.log('\n🏢 Chat Room Names:');
+      console.log('='.repeat(60));
+      this.chatRooms.forEach(room => {
+        const displayName = room.name || `[Direct Chat - ${room.type}]`;
+        console.log(`   • ${displayName}`);
+      });
       
     } catch (error) {
       console.error('❌ Failed to print summary:', error);
@@ -459,8 +539,8 @@ async function runSeeder() {
   const seeder = new DatabaseSeeder();
   
   try {
-    console.log('🌱 Starting database seeding...');
-    console.log('='.repeat(50));
+    console.log('🌱 Starting database seeding with Nepali context...');
+    console.log('='.repeat(60));
     
     await seeder.connect();
     await seeder.clearDatabase();
@@ -469,7 +549,7 @@ async function runSeeder() {
     await seeder.seedMessages();
     await seeder.printSummary();
     
-    console.log('\n🎉 Database seeding completed successfully!');
+    console.log('\n🎉 नेपाली Database seeding completed successfully!');
     
   } catch (error) {
     console.error('💥 Seeding failed:', error);
@@ -484,4 +564,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   runSeeder();
 }
 
-export { runSeeder }; 
+export { runSeeder };
