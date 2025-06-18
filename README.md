@@ -112,7 +112,7 @@ This application consists of two main components:
 ### **Project Structure**
 
 ```
-📁 Real-Time Chat Application/
+📁 realtime-chat-react-node/
 ├── 📁 frontend/                    # React TypeScript Frontend
 │   ├── 📁 src/
 │   │   ├── 📁 components/         # React Components
@@ -218,12 +218,12 @@ VS Code with TypeScript extension
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd Real-Time-Chat-Application
+git clone https://github.com/Pushparaj13811/realtime-chat-react-node.git
+cd realtime-chat-react-node
 
 # Verify project structure
 ls -la
-# Should show: frontend/ backend/ README.md
+# Should show: frontend/ backend/ README.md .env.sample files
 ```
 
 ### **Step 2: Backend Setup**
@@ -237,26 +237,23 @@ npm install
 # OR if you have Bun installed
 bun install
 
-# Create environment configuration
-touch .env
+# Copy sample environment configuration
+cp .env.sample .env
 
-# Configure environment variables
-cat > .env << EOF
-# Database Configuration
-DATABASE_URL=mongodb://localhost:27017/chat-app
-DATABASE_DB_NAME=chat-app
+# Edit environment variables as needed
+# The sample file contains all required variables with default values:
+# - DATABASE_URL=mongodb://localhost:27017/chat-app
+# - DATABASE_DB_NAME=chat-app  
+# - REDIS_HOST=localhost
+# - REDIS_PORT=6379
+# - REDIS_PASSWORD=
+# - REDIS_DB=0
+# - PORT=3000
+# - FRONTEND_URL=http://localhost:5173
+# - NODE_ENV=development
 
-# Redis Configuration  
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-REDIS_DB=0
-
-# Server Configuration
-PORT=3000
-FRONTEND_URL=http://localhost:5173
-NODE_ENV=development
-EOF
+# Optional: customize the .env file for your environment
+nano .env  # or use your preferred editor
 ```
 
 ### **Step 3: Database Setup**
@@ -327,15 +324,16 @@ cd ../frontend
 # Install dependencies
 npm install
 
-# Create environment configuration
-touch .env.local
+# Copy sample environment configuration
+cp .env.sample .env.local
 
-# Configure frontend environment
-cat > .env.local << EOF
-# Backend API Configuration
-VITE_API_URL=http://localhost:3000/api
-VITE_SOCKET_URL=http://localhost:3000
-EOF
+# Edit environment variables as needed
+# The sample file contains all required variables with default values:
+# - VITE_API_URL=http://localhost:4000/api
+# - VITE_SOCKET_URL=http://localhost:4000
+
+# Optional: customize the .env.local file for your environment
+nano .env.local  # or use your preferred editor
 ```
 
 ### **Step 7: Start Frontend Development Server**
@@ -858,7 +856,11 @@ socket.on('disconnect', (reason: string) => {
 ### **Production Environment Setup**
 
 ```bash
-# Backend Production Environment
+# Copy sample environment files for production
+cp backend/.env.sample backend/.env
+cp frontend/.env.sample frontend/.env.local
+
+# Update backend/.env for production
 NODE_ENV=production
 PORT=443
 FRONTEND_URL=https://your-domain.com
@@ -867,7 +869,7 @@ REDIS_HOST=your-redis-host
 REDIS_PORT=6380
 REDIS_PASSWORD=your-redis-password
 
-# Frontend Production Environment
+# Update frontend/.env.local for production
 VITE_API_URL=https://api.your-domain.com
 VITE_SOCKET_URL=https://api.your-domain.com
 ```
@@ -994,7 +996,7 @@ Solution:
 1. Verify backend server is running on correct port
 2. Check VITE_API_URL in .env.local
 3. Ensure CORS configuration in backend
-4. Test API directly: curl http://localhost:3000/api/health
+4. Test API directly: curl http://localhost:4000/api/health
 
 # Socket.IO Connection Failed
 Error: "WebSocket connection failed"
