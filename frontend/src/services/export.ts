@@ -10,13 +10,58 @@ interface ExportData {
 
 class ExportService {
   /**
+   * Helper function to resolve user ID to username
+   */
+  private resolveUsername(userId: string, participants: Array<{ _id: string; username: string; name?: string }>): string {
+    const user = participants.find(p => String(p._id) === String(userId));
+    return user?.username || `User (${String(userId).slice(-4)})`;
+  }
+
+  /**
    * Export messages to JSON format
    */
   exportToJSON(data: ExportData): void {
+    // Process messages to include sender names for better readability
+    const processedMessages = data.messages.map(message => {
+      let senderName: string;
+      
+      if (typeof message.senderId === 'object' && message.senderId !== null) {
+        const populatedSender = message.senderId as { username?: string; name?: string; _id?: string };
+        senderName = populatedSender.username || populatedSender.name || 'Unknown User';
+      } else {
+        // Try to find sender name from chat room participants
+        const sender = data.chatRoom.participants.find(p => String(p._id) === String(message.senderId));
+        senderName = sender?.username || `User (${String(message.senderId).slice(-4)})`;
+      }
+      
+      // Process readBy and deliveredTo to include usernames
+      const readByWithNames = message.readBy.map(r => ({
+        ...r,
+        username: this.resolveUsername(r.userId, data.chatRoom.participants)
+      }));
+      
+      const deliveredToWithNames = message.deliveredTo.map(d => ({
+        ...d,
+        username: this.resolveUsername(d.userId, data.chatRoom.participants)
+      }));
+      
+      return {
+        ...message,
+        senderName,
+        readBy: readByWithNames,
+        deliveredTo: deliveredToWithNames,
+        // Ensure senderId is always a string for consistency
+        senderId: typeof message.senderId === 'object' && message.senderId !== null 
+          ? (message.senderId as { _id?: string })._id || String(message.senderId)
+          : String(message.senderId)
+      };
+    });
+
     const exportContent = {
       ...data,
+      messages: processedMessages,
       format: 'JSON',
-      version: '1.0'
+      version: '1.1' // Bump version to indicate enhanced sender info
     };
 
     const jsonString = JSON.stringify(exportContent, null, 2);
@@ -33,33 +78,51 @@ class ExportService {
    */
   exportToCSV(data: ExportData): void {
     // Flatten message data for CSV
-    const csvData = data.messages.map(message => ({
-      messageId: message._id,
-      chatRoomId: message.chatRoomId,
-      senderId: message.senderId,
-      content: message.content,
-      messageType: message.messageType,
-      status: message.status,
-      replyTo: message.replyTo || '',
-      createdAt: new Date(message.createdAt).toLocaleString(),
-      updatedAt: new Date(message.updatedAt).toLocaleString(),
-      // Flatten delivery status
-      deliveredTo: message.deliveredTo.map(d => 
-        `${d.userId}:${new Date(d.deliveredAt).toLocaleString()}`
-      ).join(';'),
-      // Flatten read status
-      readBy: message.readBy.map(r => 
-        `${r.userId}:${new Date(r.readAt).toLocaleString()}`
-      ).join(';'),
-      // Flatten metadata
-      metadata: message.metadata ? JSON.stringify(message.metadata) : ''
-    }));
+    const csvData = data.messages.map(message => {
+      // Handle sender information properly
+      let senderInfo: string;
+      let senderName: string;
+      
+      if (typeof message.senderId === 'object' && message.senderId !== null) {
+        const populatedSender = message.senderId as { username?: string; name?: string; _id?: string; email?: string };
+        senderInfo = populatedSender._id || String(message.senderId);
+        senderName = populatedSender.username || populatedSender.name || 'Unknown User';
+      } else {
+        senderInfo = String(message.senderId);
+        // Try to find sender name from chat room participants
+        const sender = data.chatRoom.participants.find(p => String(p._id) === senderInfo);
+        senderName = sender?.username || `User (${senderInfo.slice(-4)})`;
+      }
+      
+      return {
+        messageId: message._id,
+        chatRoomId: message.chatRoomId,
+        senderId: senderInfo,
+        senderName: senderName,
+        content: message.content,
+        messageType: message.messageType,
+        status: message.status,
+        replyTo: message.replyTo || '',
+        createdAt: new Date(message.createdAt).toLocaleString(),
+        updatedAt: new Date(message.updatedAt).toLocaleString(),
+        // Flatten delivery status with usernames
+        deliveredTo: message.deliveredTo.map(d => 
+          `${this.resolveUsername(d.userId, data.chatRoom.participants)}:${new Date(d.deliveredAt).toLocaleString()}`
+        ).join(';'),
+        // Flatten read status with usernames
+        readBy: message.readBy.map(r => 
+          `${this.resolveUsername(r.userId, data.chatRoom.participants)}:${new Date(r.readAt).toLocaleString()}`
+        ).join(';'),
+        // Flatten metadata
+        metadata: message.metadata ? JSON.stringify(message.metadata) : ''
+      };
+    });
 
     // Add header row with export information
     const headerInfo = [
       ['Chat Export Information'],
       ['Export Format', 'CSV'],
-      ['Export Version', '1.0'],
+      ['Export Version', '1.1'],
       ['Chat Room ID', data.chatRoom._id],
       ['Chat Room Name', data.chatRoom.name || 'Direct Chat'],
       ['Chat Room Type', data.chatRoom.type],
@@ -75,6 +138,7 @@ class ExportService {
         'messageId',
         'chatRoomId', 
         'senderId',
+        'senderName',
         'content',
         'messageType',
         'status',

@@ -465,18 +465,50 @@ export function AgentManagement() {
             <Alert>
               <Info className="h-4 w-4" />
               <AlertDescription>
-                <div className="space-y-2">
-                  <div className="font-medium">Available Actions:</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                    <div>• <strong>Assign agents</strong> to any unassigned chat room</div>
-                    <div>• <strong>Transfer agents</strong> between different chat rooms</div>
-                    <div>• <strong>Remove agents</strong> from chat rooms</div>
-                    <div>• <strong>Monitor workloads</strong> and balance agent assignments</div>
-                    <div>• <strong>Filter chat rooms</strong> by type (Support, Direct, Group)</div>
-                    <div>• <strong>Real-time updates</strong> when agents are assigned/removed</div>
+                <div className="space-y-4">
+                  <div className="font-medium text-blue-900">Agent Management Guide</div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div className="font-medium text-blue-800">👤 Agent Actions:</div>
+                      <div className="space-y-1 text-sm">
+                        <div>• <strong>Assign Agent:</strong> Click "Assign Agent" on unassigned chat rooms (orange badge)</div>
+                        <div>• <strong>Remove Agent:</strong> Unassign agents from chat rooms when needed</div>
+                        <div>• <strong>Monitor Workload:</strong> Track agent performance and chat distribution</div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="font-medium text-blue-800">📊 Dashboard Features:</div>
+                      <div className="space-y-1 text-sm">
+                        <div>• <strong>Real-time Updates:</strong> Live notifications for all agent changes</div>
+                        <div>• <strong>Workload Monitoring:</strong> Visual indicators for agent capacity</div>
+                        <div>• <strong>Performance Metrics:</strong> Active chat counts and workload percentages</div>
+                        <div>• <strong>Priority Handling:</strong> Urgent/high priority chat identification</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-sm text-blue-700 mt-2">
-                    💡 <strong>Tip:</strong> Use the chat room type filter to focus on specific types of conversations. Real-time notifications will keep you updated on all agent changes.
+                  
+                  <div className="bg-blue-100 p-3 rounded-lg">
+                    <div className="font-medium text-blue-900 mb-2">🎯 Quick Actions Guide:</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                        <span><strong>Orange:</strong> Needs agent assignment</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                        <span><strong>Green:</strong> Agent assigned & active</span>
+                      </div>
+                                             <div className="flex items-center gap-2">
+                         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                         <span><strong>Red (pulse):</strong> Agent overloaded ({'>'} 80%)</span>
+                       </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-sm text-blue-700 bg-blue-100 p-2 rounded">
+                    💡 <strong>Pro Tips:</strong> Monitor agent workload percentages to balance assignments. Agents with {'>'} 80% workload are considered overloaded. Use the refresh button to get the latest data, or wait for real-time updates.
                   </div>
                 </div>
               </AlertDescription>
